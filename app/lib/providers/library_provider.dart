@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/models.dart';
 import '../services/api.dart';
 import '../services/local_store.dart';
+import '../providers/player_provider.dart';
 
 final libraryProvider = StateNotifierProvider<LibraryNotifier, LibraryState>((ref) {
   return LibraryNotifier(ref);
@@ -162,6 +163,44 @@ class LibraryNotifier extends StateNotifier<LibraryState> {
     state = state.copyWith(
       playlists: state.playlists.where((p) => p.id != id).toList(),
     );
+  }
+
+  Future<void> reorderPlaylistTracks(String playlistId, int oldIndex, int newIndex) async {
+    final store = ref.read(localStoreProvider);
+    final detail = store.getPlaylist(playlistId);
+    if (detail == null) return;
+
+    final tracks = List<Track>.from(detail.tracks);
+    final moved = tracks.removeAt(oldIndex);
+    tracks.insert(newIndex, moved);
+    final reordered = [
+      for (var i = 0; i < tracks.length; i++) tracks[i].copyWith(position: i),
+    ];
+
+    await store.savePlaylist(detail.copyWith(tracks: reordered));
+    ref.invalidate(playlistDetailProvider(playlistId));
+  }
+
+  Future<void> removeTrackFromPlaylist(String playlistId, String trackId) async {
+    final store = ref.read(localStoreProvider);
+    final detail = store.getPlaylist(playlistId);
+    if (detail == null) return;
+
+    final tracks = detail.tracks.where((t) => t.id != trackId).toList();
+    for (var i = 0; i < tracks.length; i++) {
+      tracks[i] = tracks[i].copyWith(position: i);
+    }
+
+    final ready = tracks.where((t) => t.status == TrackStatus.ready).length;
+    await store.savePlaylist(detail.copyWith(
+      tracks: tracks,
+      readyCount: ready,
+      syncing: ready < tracks.length,
+    ));
+
+    ref.read(playerProvider.notifier).removeTrackFromQueue(trackId);
+    ref.invalidate(playlistDetailProvider(playlistId));
+    await load();
   }
 
   @override

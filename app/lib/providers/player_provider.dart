@@ -79,11 +79,30 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
   StreamSubscription? _durSub;
   StreamSubscription? _stateSub;
   StreamSubscription? _completeSub;
+  StreamSubscription? _interruptionSub;
+  StreamSubscription? _noisySub;
   final _rng = Random();
 
   Future<void> _init() async {
     final session = await AudioSession.instance;
     await session.configure(const AudioSessionConfiguration.music());
+    await session.setActive(true);
+
+    _interruptionSub = session.interruptionEventStream.listen((event) {
+      if (event.begin) {
+        if (event.type == AudioInterruptionType.pause ||
+            event.type == AudioInterruptionType.duck) {
+          _player.pause();
+        }
+      } else if (event.type == AudioInterruptionType.pause) {
+        _player.play();
+      }
+    });
+
+    _noisySub = session.becomingNoisyEventStream.listen((_) {
+      _player.pause();
+    });
+
     _posSub = _player.positionStream.listen((p) {
       state = state.copyWith(position: p);
     });
@@ -165,6 +184,8 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
       }
       if (path == null) return;
 
+      final session = await AudioSession.instance;
+      await session.setActive(true);
       await _player.setFilePath(path);
       await _player.play();
       HapticFeedback.lightImpact();
@@ -178,6 +199,7 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
     if (_player.playing) {
       await _player.pause();
     } else {
+      await AudioSession.instance.then((s) => s.setActive(true));
       await _player.play();
     }
     HapticFeedback.lightImpact();
@@ -191,6 +213,15 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
     if (state.queue.isEmpty) return;
     final currentIdx = state.queue.indexWhere((t) => t.id == state.currentTrack?.id);
     if (currentIdx < 0) return;
+
+    if (state.shuffle && state.queue.length > 1) {
+      final others = state.queue.where((t) => t.id != state.currentTrack?.id).toList();
+      if (others.isNotEmpty) {
+        await _playTrack(others[_rng.nextInt(others.length)]);
+        HapticFeedback.selectionClick();
+        return;
+      }
+    }
 
     if (currentIdx + 1 < state.queue.length) {
       await _playTrack(state.queue[currentIdx + 1]);
@@ -216,7 +247,21 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
   }
 
   void toggleShuffle() {
-    state = state.copyWith(shuffle: !state.shuffle);
+    final enabling = !state.shuffle;
+    if (enabling && state.queue.length > 1) {
+      final current = state.currentTrack;
+      final queue = List<Track>.from(state.queue);
+      if (current != null) {
+        queue.removeWhere((t) => t.id == current.id);
+        queue.shuffle(_rng);
+        queue.insert(0, current);
+      } else {
+        queue.shuffle(_rng);
+      }
+      state = state.copyWith(shuffle: true, queue: queue);
+    } else {
+      state = state.copyWith(shuffle: enabling);
+    }
     HapticFeedback.selectionClick();
   }
 
@@ -244,12 +289,33 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
     state = state.copyWith(queue: queue);
   }
 
+  Future<void> removeTrackFromQueue(String trackId) async {
+    final queue = state.queue.where((t) => t.id != trackId).toList();
+    if (state.currentTrack?.id == trackId) {
+      if (queue.isEmpty) {
+        await _player.stop();
+        state = const PlayerState();
+        return;
+      }
+      final currentIdx = state.queue.indexWhere((t) => t.id == trackId);
+      final nextTrack = currentIdx >= 0 && currentIdx + 1 < state.queue.length
+          ? state.queue[currentIdx + 1]
+          : queue.first;
+      state = state.copyWith(queue: queue);
+      await _playTrack(nextTrack);
+      return;
+    }
+    state = state.copyWith(queue: queue);
+  }
+
   @override
   void dispose() {
     _posSub?.cancel();
     _durSub?.cancel();
     _stateSub?.cancel();
     _completeSub?.cancel();
+    _interruptionSub?.cancel();
+    _noisySub?.cancel();
     _player.dispose();
     super.dispose();
   }

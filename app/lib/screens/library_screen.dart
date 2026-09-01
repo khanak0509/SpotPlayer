@@ -6,6 +6,7 @@ import '../theme/app_theme.dart';
 import '../widgets/import_sheet.dart';
 import '../widgets/playlist_card.dart';
 import 'playlist_detail_screen.dart';
+import 'settings_screen.dart';
 
 class LibraryScreen extends ConsumerWidget {
   const LibraryScreen({super.key});
@@ -22,7 +23,18 @@ class LibraryScreen extends ConsumerWidget {
             title: const Text('Library'),
             actions: [
               IconButton(
+                icon: const Icon(Icons.settings_rounded, size: 24),
+                tooltip: 'Settings',
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                  );
+                },
+              ),
+              IconButton(
                 icon: const Icon(Icons.add_rounded, size: 28),
+                tooltip: 'Import playlist',
                 onPressed: () async {
                   await showImportSheet(context);
                   ref.read(libraryProvider.notifier).load();
@@ -41,13 +53,13 @@ class LibraryScreen extends ConsumerWidget {
               ),
             ),
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 88),
             sliver: SliverGrid(
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 2,
                 mainAxisSpacing: 16,
                 crossAxisSpacing: 16,
-                childAspectRatio: 0.72,
+                childAspectRatio: 0.82,
               ),
               delegate: SliverChildBuilderDelegate(
                 (context, i) {

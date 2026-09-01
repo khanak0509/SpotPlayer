@@ -8,6 +8,93 @@ import '../providers/player_provider.dart';
 import '../theme/app_theme.dart';
 import 'equalizer_bars.dart';
 
+class SwipeableTrackRow extends StatelessWidget {
+  final Track track;
+  final int index;
+  final VoidCallback? onTap;
+  final VoidCallback? onRetry;
+  final VoidCallback? onRemove;
+
+  const SwipeableTrackRow({
+    super.key,
+    required this.track,
+    required this.index,
+    this.onTap,
+    this.onRetry,
+    this.onRemove,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final canRetry = track.status == TrackStatus.failed;
+    final removeBg = _swipeBg(
+      alignment: Alignment.centerRight,
+      icon: Icons.delete_outline_rounded,
+      label: 'Remove',
+      color: AppColors.error,
+    );
+
+    return Dismissible(
+      key: key ?? ValueKey('swipe-${track.id}'),
+      direction: canRetry ? DismissDirection.horizontal : DismissDirection.endToStart,
+      background: canRetry
+          ? _swipeBg(
+              alignment: Alignment.centerLeft,
+              icon: Icons.refresh_rounded,
+              label: 'Retry',
+              color: AppColors.accent,
+            )
+          : removeBg,
+      secondaryBackground: canRetry ? removeBg : null,
+      confirmDismiss: (direction) async {
+        if (direction == DismissDirection.startToEnd) {
+          if (canRetry) {
+            HapticFeedback.mediumImpact();
+            onRetry?.call();
+          }
+          return false;
+        }
+        HapticFeedback.lightImpact();
+        return true;
+      },
+      onDismissed: (_) => onRemove?.call(),
+      child: TrackRow(
+        track: track,
+        index: index,
+        onTap: onTap,
+        onRetry: onRetry,
+      ),
+    );
+  }
+
+  Widget _swipeBg({
+    required Alignment alignment,
+    required IconData icon,
+    required String label,
+    required Color color,
+  }) {
+    return Container(
+      color: color.withValues(alpha: 0.18),
+      alignment: alignment,
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (alignment == Alignment.centerRight) ...[
+            Text(label, style: TextStyle(color: color, fontWeight: FontWeight.w600)),
+            const SizedBox(width: 8),
+          ],
+          Icon(icon, color: color),
+          if (alignment == Alignment.centerLeft) ...[
+            const SizedBox(width: 8),
+            Text(label, style: TextStyle(color: color, fontWeight: FontWeight.w600)),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 class TrackRow extends ConsumerWidget {
   final Track track;
   final int index;
@@ -33,11 +120,11 @@ class TrackRow extends ConsumerWidget {
       child: InkWell(
         onTap: track.status == TrackStatus.ready ? onTap : null,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
           child: Row(
             children: [
               SizedBox(
-                width: 28,
+                width: 24,
                 child: isCurrent && isPlaying
                     ? const EqualizerBars()
                     : Text(
@@ -50,7 +137,7 @@ class TrackRow extends ConsumerWidget {
                         ),
                       ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 10),
               ClipRRect(
                 borderRadius: BorderRadius.circular(6),
                 child: track.albumArt != null
@@ -91,12 +178,14 @@ class TrackRow extends ConsumerWidget {
                   ],
                 ),
               ),
-              const SizedBox(width: 8),
-              _StatusIndicator(
-                status: track.status,
-                onRetry: onRetry,
-              ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
+              if (track.status != TrackStatus.ready) ...[
+                _StatusIndicator(
+                  status: track.status,
+                  onRetry: onRetry,
+                ),
+                const SizedBox(width: 6),
+              ],
               Text(
                 track.durationFormatted,
                 style: const TextStyle(
@@ -131,7 +220,7 @@ class _StatusIndicator extends StatelessWidget {
   Widget build(BuildContext context) {
     switch (status) {
       case TrackStatus.ready:
-        return const Icon(Icons.check_circle, size: 16, color: AppColors.success);
+        return const SizedBox.shrink();
       case TrackStatus.downloading:
         return const SizedBox(
           width: 16,

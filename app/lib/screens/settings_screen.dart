@@ -73,14 +73,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      appBar: AppBar(title: const Text('Settings')),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
         children: [
-          AppBar(
-            title: const Text('Settings'),
-            automaticallyImplyLeading: false,
-          ),
           _SectionHeader('Storage'),
           if (_loading)
             const Padding(

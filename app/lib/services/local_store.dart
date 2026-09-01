@@ -183,7 +183,7 @@ class TrackSyncService {
     final store = ref.read(localStoreProvider);
     final needQueue = detail.tracks.where((t) {
       if (store.hasTrack(t.id)) return false;
-      return t.status != TrackStatus.downloading;
+      return t.status == TrackStatus.queued || t.status == TrackStatus.resolving;
     }).toList();
     if (needQueue.isNotEmpty) {
       await queueTracks(needQueue);

@@ -21,19 +21,123 @@ def _audio_path(track_id: str) -> Path:
     return TEMP_DIR / f"{safe}.mp3"
 
 
+def _norm(text: str) -> str:
+    return re.sub(r"\s+", " ", (text or "").lower()).strip()
+
+
+_NON_ORIGINAL = (
+    "cover", "karaoke", "instrumental", "8d audio", "8d", "slowed", "reverb",
+    "sped up", "speed up", "tribute", "reaction", "mashup", "dj mix", "nightcore",
+    "lyric video", "lyrics video", "with lyrics", "whatsapp", "shorts", "1 hour",
+    "loop", "bass boosted", "fan made", "fanmade", "cover by", "sung by",
+    "recreated", "re-create", "female version", "male version",
+)
+
+_VARIANT = ("unplugged", "live", "remix", "redux", "acoustic", "reprise", "version", "lofi", "lo-fi")
+
+_OFFICIAL_LABELS = (
+    "t-series", "sony music", "zee music", "tips", "saregama", "yrf", "wave music",
+    "universal", "warner", "atlantic", "interscope", "vevo",
+)
+
+
+def _spotify_allows_variant(spotify_title: str) -> set[str]:
+    t = _norm(spotify_title)
+    return {v for v in _VARIANT if v in t}
+
+
+def _official_bonus(video_title: str, channel: str, artist: str) -> float:
+    vt = _norm(video_title)
+    ch = _norm(channel)
+    primary_artist = _norm(artist.split(",")[0])
+    bonus = 0.0
+
+    for marker in (
+        "official audio", "official video", "official music video",
+        "full audio", "full video", "audio song",
+    ):
+        if marker in vt:
+            bonus += 0.12
+
+    if " - topic" in ch or ch.endswith("topic"):
+        bonus += 0.3
+    if "vevo" in ch:
+        bonus += 0.22
+    if primary_artist and primary_artist in ch:
+        bonus += 0.18
+    for label in _OFFICIAL_LABELS:
+        if label in ch:
+            bonus += 0.1
+
+    return min(bonus, 0.55)
+
+
+def _non_original_penalty(video_title: str, channel: str, spotify_title: str) -> float:
+    vt = _norm(video_title)
+    ch = _norm(channel)
+    allowed = _spotify_allows_variant(spotify_title)
+    penalty = 0.0
+
+    for kw in _NON_ORIGINAL:
+        if kw in vt or kw in ch:
+            penalty += 0.35
+
+    for variant in _VARIANT:
+        if variant in vt and variant not in allowed:
+            penalty += 0.35 if variant in ("unplugged", "live", "remix", "acoustic", "lofi", "lo-fi") else 0.2
+
+    if "lyrics" in vt and "official" not in vt:
+        penalty += 0.25
+
+    return min(penalty, 1.0)
+
+
+def _track_name(title: str) -> str:
+    cleaned = re.sub(r"\(.*?\)", "", title)
+    cleaned = re.sub(r'\s*-\s*from.*', "", cleaned, flags=re.I)
+    return _norm(cleaned.split("-")[0])
+
+
 def _score_result(entry: dict, artist: str, title: str, duration_ms: int) -> float:
-    video_title = (entry.get("title") or "").lower()
-    target = f"{artist} - {title}".lower()
-    title_sim = SequenceMatcher(None, video_title, target).ratio()
-    if artist.lower() in video_title and title.lower() in video_title:
-        title_sim = min(1.0, title_sim + 0.25)
+    video_title = entry.get("title") or ""
+    channel = entry.get("channel") or entry.get("uploader") or ""
+    vt = _norm(video_title)
+    target = _norm(f"{artist} - {title}")
+    track_name = _track_name(title)
+
+    if track_name and track_name not in vt:
+        return 0.0
+
+    title_sim = SequenceMatcher(None, vt, target).ratio()
+
+    primary_artist = _norm(artist.split(",")[0])
+    if primary_artist in vt and track_name in vt:
+        title_sim = min(1.0, title_sim + 0.2)
+
     video_dur = entry.get("duration") or 0
     if video_dur and duration_ms:
         diff_sec = abs(video_dur - duration_ms / 1000)
-        dur_score = max(0.0, 1.0 - diff_sec / 45.0)
+        if diff_sec <= 3:
+            dur_score = 1.0
+        elif diff_sec <= 10:
+            dur_score = 0.85
+        elif diff_sec <= 20:
+            dur_score = 0.55
+        else:
+            dur_score = max(0.0, 1.0 - diff_sec / 30.0)
     else:
-        dur_score = 0.3
-    return title_sim * 0.55 + dur_score * 0.45
+        dur_score = 0.15
+
+    base = title_sim * 0.4 + dur_score * 0.35
+    bonus = _official_bonus(video_title, channel, artist)
+    penalty = _non_original_penalty(video_title, channel, title)
+    return max(0.0, base + bonus - penalty)
+
+
+def _rank_results(entries: list[dict], artist: str, title: str, duration_ms: int) -> list[tuple[float, dict]]:
+    ranked = [(_score_result(e, artist, title, duration_ms), e) for e in entries]
+    ranked.sort(key=lambda item: item[0], reverse=True)
+    return ranked
 
 
 def _ydl_opts(extra: dict | None = None) -> dict:
@@ -55,9 +159,29 @@ def _ydl_opts(extra: dict | None = None) -> dict:
     return base
 
 
-def _search_youtube(artist: str, title: str, duration_ms: int) -> str | None:
-    query = f"ytsearch5:{artist} - {title}"
-    opts = _ydl_opts({"skip_download": True, "extract_flat": False})
+def _entry_url(entry: dict) -> str | None:
+    url = entry.get("webpage_url") or entry.get("url")
+    if url:
+        return url
+    vid = entry.get("id")
+    if vid:
+        return f"https://www.youtube.com/watch?v={vid}"
+    return None
+
+
+def _search_youtube(
+    artist: str,
+    title: str,
+    duration_ms: int,
+    exclude: set[str] | None = None,
+) -> str | None:
+    query = f"ytsearch12:{artist} {title} official audio"
+    opts = {
+        "quiet": True,
+        "no_warnings": True,
+        "skip_download": True,
+        "extract_flat": True,
+    }
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(query, download=False)
@@ -65,12 +189,27 @@ def _search_youtube(artist: str, title: str, duration_ms: int) -> str | None:
         logger.warning("yt-dlp search failed for %s - %s: %s", artist, title, e)
         return None
 
-    entries = info.get("entries") or []
+    entries = [e for e in (info.get("entries") or []) if e]
     if not entries:
+        logger.warning("yt-dlp search returned no results for %s - %s", artist, title)
         return None
 
-    best = max(entries, key=lambda e: _score_result(e, artist, title, duration_ms))
-    return best.get("webpage_url") or best.get("url")
+    skip = exclude or set()
+    for score, entry in _rank_results(entries, artist, title, duration_ms):
+        url = _entry_url(entry)
+        if not url or url in skip:
+            continue
+        if score < 0.25:
+            break
+        logger.info(
+            "picked %.2f %s - %s -> %s",
+            score,
+            artist,
+            title,
+            (entry.get("title") or "")[:80],
+        )
+        return url
+    return None
 
 
 def _download_from_url(url: str, out_path: Path) -> bool:
@@ -107,17 +246,18 @@ def download_track_sync(track_id: str, artist: str, title: str, duration_ms: int
     if out_path.exists():
         return str(out_path)
 
+    tried: set[str] = set()
     url = _search_youtube(artist, title, duration_ms)
     if not url:
         return None
 
-    for attempt in range(2):
+    for attempt in range(3):
         if _download_from_url(url, out_path):
             return str(out_path)
-        if attempt == 0:
-            url = _search_youtube(artist, title, duration_ms)
-            if not url:
-                break
+        tried.add(url)
+        url = _search_youtube(artist, title, duration_ms, exclude=tried)
+        if not url:
+            break
     return None
 
 
@@ -138,7 +278,7 @@ async def enqueue_track(track_id: str, artist: str, title: str, duration_ms: int
 
     if status == "ready" and path and Path(path).exists():
         return
-    if status == "downloading" or track_id in _pending:
+    if status in ("downloading", "failed") or track_id in _pending:
         return
 
     _pending.add(track_id)

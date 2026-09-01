@@ -31,14 +31,14 @@ class Track {
     );
   }
 
-  Track copyWith({TrackStatus? status}) => Track(
+  Track copyWith({TrackStatus? status, int? position}) => Track(
         id: id,
         name: name,
         artist: artist,
         durationMs: durationMs,
         albumArt: albumArt,
         status: status ?? this.status,
-        position: position,
+        position: position ?? this.position,
       );
 
   Map<String, dynamic> toJson() => {
@@ -139,6 +139,17 @@ class PlaylistDetail {
       syncing: json['syncing'] as bool? ?? false,
     );
   }
+
+  PlaylistDetail copyWith({List<Track>? tracks, int? readyCount, bool? syncing}) =>
+      PlaylistDetail(
+        id: id,
+        name: name,
+        coverUrl: coverUrl,
+        spotifyUrl: spotifyUrl,
+        tracks: tracks ?? this.tracks,
+        readyCount: readyCount ?? this.readyCount,
+        syncing: syncing ?? this.syncing,
+      );
 
   Map<String, dynamic> toJson() => {
         'id': id,

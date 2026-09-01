@@ -76,34 +76,28 @@ class _ImportSheetState extends ConsumerState<ImportSheet> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.only(
-        left: 24,
-        right: 24,
-        top: 16,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 24,
-      ),
+      padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Center(
-            child: Container(
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(
-                color: AppColors.divider,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
-          const SizedBox(height: 20),
-          Text(
-            'Import playlist',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w700,
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Import playlist',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
                 ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close_rounded, color: AppColors.textMuted),
+                onPressed: _submitting ? null : () => Navigator.pop(context),
+              ),
+            ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 4),
           Text(
             'Paste a Spotify playlist link',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
@@ -179,10 +173,14 @@ class _ImportSheetState extends ConsumerState<ImportSheet> {
 }
 
 Future<PlaylistSummary?> showImportSheet(BuildContext context) {
-  return showModalBottomSheet<PlaylistSummary>(
+  return showDialog<PlaylistSummary>(
     context: context,
-    isScrollControlled: true,
-    backgroundColor: AppColors.surfaceElevated,
-    builder: (_) => const ImportSheet(),
+    barrierColor: Colors.black.withValues(alpha: 0.65),
+    builder: (_) => Dialog(
+      backgroundColor: AppColors.surfaceElevated,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 28),
+      child: const ImportSheet(),
+    ),
   );
 }

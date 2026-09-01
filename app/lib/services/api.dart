@@ -6,7 +6,7 @@ import '../models/models.dart';
 final apiProvider = Provider((ref) => ApiService());
 
 class ApiService {
-  static const defaultBaseUrl = 'https://spotplayer-api.onrender.com/api';
+  static const defaultBaseUrl = 'http://127.0.0.1:8000/api';
   static const coldStartTimeout = Duration(seconds: 90);
   static const normalTimeout = Duration(seconds: 30);
 
