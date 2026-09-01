@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: spotplayer-api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: DOWNLOAD_WORKERS
+        value: "3"
+      - key: PORT
+        value: "8000"
