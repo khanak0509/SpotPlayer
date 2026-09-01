@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+.env
+backend/data/
+*.mp3
+*.part
+.DS_Store
+
+app/.dart_tool/
+app/build/
+app/.flutter-plugins-dependencies
+app/.hive/
