@@ -16,6 +16,44 @@ class AppColors {
   static const divider = Color(0xFF2A2A32);
 }
 
+FontWeight thickerWeight(FontWeight? weight) {
+  return switch (weight ?? FontWeight.w400) {
+    FontWeight.w100 => FontWeight.w200,
+    FontWeight.w200 => FontWeight.w300,
+    FontWeight.w300 => FontWeight.w400,
+    FontWeight.w400 => FontWeight.w500,
+    FontWeight.w500 => FontWeight.w600,
+    FontWeight.w600 => FontWeight.w700,
+    FontWeight.w700 => FontWeight.w800,
+    _ => weight ?? FontWeight.w500,
+  };
+}
+
+TextStyle? _thickenStyle(TextStyle? style) {
+  if (style == null) return null;
+  return style.copyWith(fontWeight: thickerWeight(style.fontWeight));
+}
+
+TextTheme thickenTextTheme(TextTheme theme) {
+  return theme.copyWith(
+    displayLarge: _thickenStyle(theme.displayLarge),
+    displayMedium: _thickenStyle(theme.displayMedium),
+    displaySmall: _thickenStyle(theme.displaySmall),
+    headlineLarge: _thickenStyle(theme.headlineLarge),
+    headlineMedium: _thickenStyle(theme.headlineMedium),
+    headlineSmall: _thickenStyle(theme.headlineSmall),
+    titleLarge: _thickenStyle(theme.titleLarge),
+    titleMedium: _thickenStyle(theme.titleMedium),
+    titleSmall: _thickenStyle(theme.titleSmall),
+    bodyLarge: _thickenStyle(theme.bodyLarge),
+    bodyMedium: _thickenStyle(theme.bodyMedium),
+    bodySmall: _thickenStyle(theme.bodySmall),
+    labelLarge: _thickenStyle(theme.labelLarge),
+    labelMedium: _thickenStyle(theme.labelMedium),
+    labelSmall: _thickenStyle(theme.labelSmall),
+  );
+}
+
 ThemeData buildTheme() {
   final base = ThemeData(
     brightness: Brightness.dark,
@@ -32,9 +70,23 @@ ThemeData buildTheme() {
   );
 
   return base.copyWith(
-    textTheme: GoogleFonts.plusJakartaSansTextTheme(base.textTheme).apply(
-      bodyColor: AppColors.textPrimary,
-      displayColor: AppColors.textPrimary,
+    textTheme: thickenTextTheme(
+      GoogleFonts.plusJakartaSansTextTheme(base.textTheme).apply(
+        bodyColor: AppColors.textPrimary,
+        displayColor: AppColors.textPrimary,
+      ),
+    ),
+    listTileTheme: ListTileThemeData(
+      titleTextStyle: GoogleFonts.plusJakartaSans(
+        fontSize: 15,
+        fontWeight: FontWeight.w500,
+        color: AppColors.textPrimary,
+      ),
+      subtitleTextStyle: GoogleFonts.plusJakartaSans(
+        fontSize: 13,
+        fontWeight: FontWeight.w500,
+        color: AppColors.textSecondary,
+      ),
     ),
     appBarTheme: AppBarTheme(
       backgroundColor: Colors.transparent,
@@ -55,7 +107,10 @@ ThemeData buildTheme() {
     ),
     snackBarTheme: SnackBarThemeData(
       backgroundColor: AppColors.surfaceElevated,
-      contentTextStyle: GoogleFonts.plusJakartaSans(color: AppColors.textPrimary),
+      contentTextStyle: GoogleFonts.plusJakartaSans(
+        color: AppColors.textPrimary,
+        fontWeight: FontWeight.w500,
+      ),
       behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
     ),

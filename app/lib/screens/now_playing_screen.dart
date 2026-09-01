@@ -116,7 +116,11 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen>
                           ),
                           subtitle: Text(
                             track.artist,
-                            style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                          style: const TextStyle(
+                            color: AppColors.textSecondary,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
                           ),
                           trailing: isCurrent
                               ? const Icon(Icons.equalizer, color: AppColors.accent, size: 20)
@@ -269,6 +273,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen>
                           style: const TextStyle(
                             color: AppColors.textSecondary,
                             fontSize: 16,
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
                       ],
@@ -309,6 +314,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen>
                                 style: const TextStyle(
                                   color: AppColors.textMuted,
                                   fontSize: 12,
+                                  fontWeight: FontWeight.w500,
                                 ),
                               ),
                               Text(
@@ -316,6 +322,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen>
                                 style: const TextStyle(
                                   color: AppColors.textMuted,
                                   fontSize: 12,
+                                  fontWeight: FontWeight.w500,
                                 ),
                               ),
                             ],

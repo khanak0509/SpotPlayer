@@ -354,6 +354,7 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
                         style: TextStyle(
                           color: AppColors.textMuted.withValues(alpha: 0.85),
                           fontSize: 11,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
                       const SizedBox(height: 8),

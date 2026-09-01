@@ -139,7 +139,10 @@ class _SettingsTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListTile(
       title: Text(title),
-      subtitle: Text(subtitle, style: const TextStyle(color: AppColors.textSecondary)),
+      subtitle: Text(
+        subtitle,
+        style: const TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w500),
+      ),
     );
   }
 }

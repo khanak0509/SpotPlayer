@@ -153,7 +153,7 @@ class _MiniPlayerBarState extends ConsumerState<MiniPlayerBar> {
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                         style: const TextStyle(
-                                          fontWeight: FontWeight.w600,
+                                          fontWeight: FontWeight.w700,
                                           fontSize: 14,
                                         ),
                                       ),
@@ -164,6 +164,7 @@ class _MiniPlayerBarState extends ConsumerState<MiniPlayerBar> {
                                         style: const TextStyle(
                                           color: AppColors.textSecondary,
                                           fontSize: 12,
+                                          fontWeight: FontWeight.w500,
                                         ),
                                       ),
                                     ],

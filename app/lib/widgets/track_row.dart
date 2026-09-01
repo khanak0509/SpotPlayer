@@ -133,7 +133,7 @@ class TrackRow extends ConsumerWidget {
                         style: TextStyle(
                           color: isCurrent ? AppColors.accent : AppColors.textSecondary,
                           fontSize: 13,
-                          fontWeight: FontWeight.w500,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
               ),
@@ -160,7 +160,7 @@ class TrackRow extends ConsumerWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        fontWeight: FontWeight.w500,
+                        fontWeight: FontWeight.w600,
                         fontSize: 15,
                         color: isCurrent ? AppColors.accent : AppColors.textPrimary,
                       ),
@@ -173,6 +173,7 @@ class TrackRow extends ConsumerWidget {
                       style: const TextStyle(
                         color: AppColors.textSecondary,
                         fontSize: 13,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
                   ],
@@ -193,7 +194,7 @@ class TrackRow extends ConsumerWidget {
                       ? AppColors.textPrimary.withValues(alpha: 0.85)
                       : AppColors.textSecondary,
                   fontSize: 12,
-                  fontWeight: FontWeight.w500,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ],

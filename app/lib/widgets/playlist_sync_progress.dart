@@ -53,17 +53,21 @@ class PlaylistSyncProgress extends StatelessWidget {
               if (failed > 0)
                 Text(
                   '$failed failed',
-                  style: const TextStyle(color: AppColors.error, fontSize: 12),
+                  style: const TextStyle(color: AppColors.error, fontSize: 12, fontWeight: FontWeight.w500),
                 )
               else if (active > 0)
                 Text(
                   'Downloading…',
-                  style: TextStyle(color: AppColors.textSecondary.withValues(alpha: 0.9), fontSize: 12),
+                  style: TextStyle(
+                    color: AppColors.textSecondary.withValues(alpha: 0.9),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
                 )
               else if (ready == total)
                 const Text(
                   'All ready',
-                  style: TextStyle(color: AppColors.success, fontSize: 12),
+                  style: TextStyle(color: AppColors.success, fontSize: 12, fontWeight: FontWeight.w500),
                 ),
             ],
           ),

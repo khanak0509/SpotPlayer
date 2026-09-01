@@ -94,6 +94,7 @@ class PlaylistCard extends StatelessWidget {
                     style: const TextStyle(
                       color: AppColors.textSecondary,
                       fontSize: 11,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ],
