@@ -28,7 +28,7 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
   @override
   void initState() {
     super.initState();
-    _pollTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+    _pollTimer = Timer.periodic(const Duration(seconds: 5), (_) {
       ref.invalidate(playlistDetailProvider(widget.playlistId));
       ref.read(libraryProvider.notifier).load();
     });

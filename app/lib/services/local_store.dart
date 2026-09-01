@@ -181,19 +181,26 @@ class TrackSyncService {
 
   Future<PlaylistDetail> refreshPlaylist(PlaylistDetail detail) async {
     final store = ref.read(localStoreProvider);
-    await queueTracks(detail.tracks);
+    final needQueue = detail.tracks.where((t) {
+      if (store.hasTrack(t.id)) return false;
+      return t.status != TrackStatus.downloading;
+    }).toList();
+    if (needQueue.isNotEmpty) {
+      await queueTracks(needQueue);
+    }
 
     final statuses = await fetchStatuses(detail.tracks);
     var merged = store.mergeStatuses(detail, statuses);
 
-    for (final track in merged.tracks) {
-      if (store.hasTrack(track.id)) continue;
-      if (track.status != TrackStatus.ready) continue;
-      await downloadTrack(track);
-    }
+    final toDownload = merged.tracks
+        .where((t) => !store.hasTrack(t.id) && t.status == TrackStatus.ready)
+        .take(3)
+        .toList();
 
-    statuses.addAll(await fetchStatuses(detail.tracks));
-    merged = store.mergeStatuses(detail, statuses);
+    await Future.wait(toDownload.map(downloadTrack));
+
+    final updatedStatuses = await fetchStatuses(detail.tracks);
+    merged = store.mergeStatuses(detail, updatedStatuses);
 
     for (final track in merged.tracks) {
       if (store.hasTrack(track.id)) {
@@ -231,7 +238,10 @@ class TrackSyncService {
     final dest = await store.trackFilePath(track.id);
     final tmp = '$dest.part';
 
-    await Dio().download(api.streamUrl(track.id), tmp);
+    await Dio(BaseOptions(
+      connectTimeout: const Duration(seconds: 30),
+      receiveTimeout: const Duration(minutes: 5),
+    )).download(api.streamUrl(track.id), tmp);
     await File(tmp).rename(dest);
     await store.saveTrackPath(track.id, dest);
     return dest;

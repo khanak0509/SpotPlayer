@@ -1,22 +1,19 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/models.dart';
 
 final apiProvider = Provider((ref) => ApiService());
 
 class ApiService {
-  static const defaultBaseUrl = 'http://localhost:8000/api';
+  static const defaultBaseUrl = 'https://spotplayer-api.onrender.com/api';
   static const coldStartTimeout = Duration(seconds: 90);
   static const normalTimeout = Duration(seconds: 30);
 
   late Dio _dio;
-  String baseUrl = defaultBaseUrl;
+  final String baseUrl = defaultBaseUrl;
 
   Future<void> init() async {
-    final prefs = await SharedPreferences.getInstance();
-    baseUrl = prefs.getString('backend_url') ?? defaultBaseUrl;
     _dio = _buildDio(normalTimeout);
   }
 
@@ -25,13 +22,6 @@ class ApiService {
         connectTimeout: timeout,
         receiveTimeout: timeout,
       ));
-
-  Future<void> setBaseUrl(String url) async {
-    baseUrl = url.endsWith('/api') ? url : '$url/api';
-    _dio.options.baseUrl = baseUrl;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('backend_url', baseUrl);
-  }
 
   String streamUrl(String trackId) => '$baseUrl/tracks/$trackId/stream';
 
@@ -66,7 +56,22 @@ class ApiService {
     if (trackIds.isEmpty) return {};
     final res = await _dio.post('/tracks/status', data: {'track_ids': trackIds});
     final statuses = res.data['statuses'] as Map<String, dynamic>? ?? {};
-    return statuses.map((k, v) => MapEntry(k, Track.fromJson({'status': v}).status));
+    return statuses.map((k, v) => MapEntry(k, _parseStatus(v?.toString())));
+  }
+
+  TrackStatus _parseStatus(String? s) {
+    switch (s) {
+      case 'ready':
+        return TrackStatus.ready;
+      case 'downloading':
+        return TrackStatus.downloading;
+      case 'failed':
+        return TrackStatus.failed;
+      case 'resolving':
+        return TrackStatus.resolving;
+      default:
+        return TrackStatus.queued;
+    }
   }
 
   Future<void> retryTrack(String trackId, List<Track> tracks) async {

@@ -106,7 +106,7 @@ class LibraryNotifier extends StateNotifier<LibraryState> {
       }
 
       await store.savePlaylist(detail);
-      sync.queueTracks(detail.tracks);
+      await sync.queueTracks(detail.tracks);
 
       await load();
       return store.getAllPlaylists().firstWhere((p) => p.id == detail.id);

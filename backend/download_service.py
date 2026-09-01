@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 download_queue: asyncio.Queue | None = None
 _workers_started = False
+_pending: set[str] = set()
 
 
 def _audio_path(track_id: str) -> Path:
@@ -35,14 +36,28 @@ def _score_result(entry: dict, artist: str, title: str, duration_ms: int) -> flo
     return title_sim * 0.55 + dur_score * 0.45
 
 
-def _search_youtube(artist: str, title: str, duration_ms: int) -> str | None:
-    query = f"ytsearch5:{artist} - {title}"
-    opts = {
+def _ydl_opts(extra: dict | None = None) -> dict:
+    base = {
         "quiet": True,
         "no_warnings": True,
-        "skip_download": True,
-        "extract_flat": False,
+        "retries": 3,
+        "fragment_retries": 3,
+        "extractor_args": {"youtube": {"player_client": ["android", "web"]}},
+        "http_headers": {
+            "User-Agent": (
+                "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
+            ),
+        },
     }
+    if extra:
+        base.update(extra)
+    return base
+
+
+def _search_youtube(artist: str, title: str, duration_ms: int) -> str | None:
+    query = f"ytsearch5:{artist} - {title}"
+    opts = _ydl_opts({"skip_download": True, "extract_flat": False})
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(query, download=False)
@@ -61,9 +76,7 @@ def _search_youtube(artist: str, title: str, duration_ms: int) -> str | None:
 def _download_from_url(url: str, out_path: Path) -> bool:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     tmp = out_path.with_suffix(".part")
-    opts = {
-        "quiet": True,
-        "no_warnings": True,
+    opts = _ydl_opts({
         "format": "bestaudio/best",
         "outtmpl": str(tmp.with_suffix("")),
         "postprocessors": [{
@@ -71,9 +84,7 @@ def _download_from_url(url: str, out_path: Path) -> bool:
             "preferredcodec": "mp3",
             "preferredquality": "192",
         }],
-        "retries": 3,
-        "fragment_retries": 3,
-    }
+    })
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:
             ydl.download([url])
@@ -127,9 +138,10 @@ async def enqueue_track(track_id: str, artist: str, title: str, duration_ms: int
 
     if status == "ready" and path and Path(path).exists():
         return
-    if status == "downloading":
+    if status == "downloading" or track_id in _pending:
         return
 
+    _pending.add(track_id)
     await set_status(track_id, "queued")
     await download_queue.put({
         "track_id": track_id,
@@ -137,6 +149,7 @@ async def enqueue_track(track_id: str, artist: str, title: str, duration_ms: int
         "title": title,
         "duration_ms": duration_ms,
     })
+    logger.info("queued %s - %s", artist, title)
 
 
 async def enqueue_tracks(tracks: list[dict]):
@@ -169,12 +182,15 @@ async def _worker(worker_id: int):
             if path:
                 await set_status(track_id, "ready")
                 await set_path(track_id, path)
+                logger.info("ready %s", track_id)
             else:
                 await set_status(track_id, "failed")
+                logger.warning("failed %s", track_id)
         except Exception as e:
             logger.exception("worker %d failed on %s: %s", worker_id, track_id, e)
             await set_status(track_id, "failed")
         finally:
+            _pending.discard(track_id)
             download_queue.task_done()
 
 
@@ -191,7 +207,9 @@ async def start_workers():
 async def retry_track(track_id: str, artist: str, title: str, duration_ms: int):
     delete_temp_file(track_id)
     await clear_path(track_id)
+    _pending.discard(track_id)
     await set_status(track_id, "queued")
+    _pending.add(track_id)
     await download_queue.put({
         "track_id": track_id,
         "artist": artist,
