@@ -343,27 +343,10 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen>
                         ),
                         ScaleButton(
                           onPressed: () => ref.read(playerProvider.notifier).togglePlay(),
-                          child: Container(
-                            width: 68,
-                            height: 68,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              gradient: const LinearGradient(
-                                colors: [AppColors.accent, AppColors.accentMuted],
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: AppColors.accent.withValues(alpha: 0.4),
-                                  blurRadius: 20,
-                                  offset: const Offset(0, 6),
-                                ),
-                              ],
-                            ),
-                            child: Icon(
-                              player.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                              size: 36,
-                              color: Colors.white,
-                            ),
+                          child: Icon(
+                            player.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                            size: 44,
+                            color: AppColors.textPrimary,
                           ),
                         ),
                         ScaleButton(

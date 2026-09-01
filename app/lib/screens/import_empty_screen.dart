@@ -64,23 +64,14 @@ class ImportEmptyScreen extends StatelessWidget {
                     width: double.infinity,
                     height: 56,
                     decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [AppColors.accent, AppColors.accentMuted],
-                      ),
+                      color: AppColors.textPrimary,
                       borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppColors.accent.withValues(alpha: 0.35),
-                          blurRadius: 20,
-                          offset: const Offset(0, 8),
-                        ),
-                      ],
                     ),
                     alignment: Alignment.center,
                     child: const Text(
                       'Import from Spotify',
                       style: TextStyle(
-                        color: Colors.white,
+                        color: AppColors.background,
                         fontWeight: FontWeight.w600,
                         fontSize: 16,
                       ),

@@ -131,7 +131,7 @@ class TrackRow extends ConsumerWidget {
                         '${index + 1}',
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                          color: isCurrent ? AppColors.accent : AppColors.textMuted,
+                          color: isCurrent ? AppColors.accent : AppColors.textSecondary,
                           fontSize: 13,
                           fontWeight: FontWeight.w500,
                         ),
@@ -188,9 +188,12 @@ class TrackRow extends ConsumerWidget {
               ],
               Text(
                 track.durationFormatted,
-                style: const TextStyle(
-                  color: AppColors.textMuted,
+                style: TextStyle(
+                  color: isCurrent
+                      ? AppColors.textPrimary.withValues(alpha: 0.85)
+                      : AppColors.textSecondary,
                   fontSize: 12,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
             ],

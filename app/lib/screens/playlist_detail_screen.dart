@@ -285,12 +285,9 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
                                 child: Container(
                                   height: 48,
                                   decoration: BoxDecoration(
-                                    gradient: readyTracks.isEmpty
-                                        ? null
-                                        : const LinearGradient(
-                                            colors: [AppColors.accent, AppColors.accentMuted],
-                                          ),
-                                    color: readyTracks.isEmpty ? AppColors.surfaceHighlight : null,
+                                    color: readyTracks.isEmpty
+                                        ? AppColors.surfaceHighlight
+                                        : AppColors.textPrimary,
                                     borderRadius: BorderRadius.circular(24),
                                   ),
                                   alignment: Alignment.center,
@@ -301,7 +298,7 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
                                         showPause ? Icons.pause_rounded : Icons.play_arrow_rounded,
                                         color: readyTracks.isEmpty
                                             ? AppColors.textMuted
-                                            : Colors.white,
+                                            : AppColors.background,
                                       ),
                                       const SizedBox(width: 4),
                                       Text(
@@ -310,7 +307,7 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
                                           fontWeight: FontWeight.w600,
                                           color: readyTracks.isEmpty
                                               ? AppColors.textMuted
-                                              : Colors.white,
+                                              : AppColors.background,
                                         ),
                                       ),
                                     ],

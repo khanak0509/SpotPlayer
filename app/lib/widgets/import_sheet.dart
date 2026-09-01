@@ -149,16 +149,14 @@ class _ImportSheetState extends ConsumerState<ImportSheet> {
               child: Container(
                 height: 52,
                 decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [AppColors.accent, AppColors.accentMuted],
-                  ),
+                  color: AppColors.textPrimary,
                   borderRadius: BorderRadius.circular(14),
                 ),
                 alignment: Alignment.center,
                 child: const Text(
                   'Import',
                   style: TextStyle(
-                    color: Colors.white,
+                    color: AppColors.background,
                     fontWeight: FontWeight.w600,
                     fontSize: 16,
                   ),
