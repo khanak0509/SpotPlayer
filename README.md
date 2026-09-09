@@ -1,19 +1,27 @@
 # SpotPlayer
 
-**Paste a Spotify playlist. Keep it on your phone. Play offline.**
+**Paste a Spotify link. Keep the music on your phone. Play offline.**
 
-SpotPlayer turns any Spotify playlist into your own offline library. Import once, and every track lives on your phone — no streaming, no re-downloading when you hit play.
+SpotPlayer turns public Spotify playlists, albums, and tracks into your own offline library. Import once, and audio lives on your phone — no streaming when you hit play.
+
+Your computer is only needed **while importing or syncing**. After that, the app runs on its own.
 
 ---
 
-## What you get
+## Features
 
-- Import from a Spotify link
-- Songs saved as MP3 on your phone
-- Full player — shuffle, queue, background play
-- Works offline after import
-
-Your computer is only needed **while adding a new playlist**. After that, the app runs on its own.
+- Import **playlist / album / track** links (Liked Songs needs a public playlist — no Spotify login)
+- Offline MP3 library with search, favorites, recents
+- Full player: shuffle (restores order when off), repeat, queue, sleep timer, speed
+- Gapless + optional smooth fade between tracks
+- Resume last song and position after app kill (starts paused)
+- Background play, notification shade, AirPods next/prev
+- Interactive Android home widget (play / pause / next / previous)
+- Android Auto media source support
+- Faster parallel downloads + Retry all failed
+- Deleting a playlist reclaims orphaned audio files
+- Durable backend store (Docker volume survives restart)
+- Teal-on-black brand UI
 
 ---
 
@@ -21,59 +29,57 @@ Your computer is only needed **while adding a new playlist**. After that, the ap
 
 ### 1 · Install the app on your phone
 
-Build a small release APK (share the `arm64-v8a` file — works on most phones):
-
 ```bash
 cd app
 flutter pub get
 flutter build apk --release --split-per-abi --tree-shake-icons
 ```
 
-APK path:
+APK:
 
 ```
 app/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
 ```
 
-Upload that file and share your download link.
+Allow notifications when prompted (media controls / shade).
 
-### 2 · Import a playlist
+### 2 · Start the backend
 
-**On your computer** (same Wi-Fi as your phone). From the **project root** (not the `app` folder):
+Phone and computer on the **same Wi-Fi**. From the **project root**:
 
 ```bash
-cd /path/to/spotify
 ./start.sh        # Mac / Linux
-```
-
-```bat
 start.bat         # Windows
 ```
 
-That starts the backend and prints a link — copy it:
+Copy the printed LAN URL, e.g. `http://192.168.1.42:8000/api`.
 
-```
-http://192.168.1.42:8000/api
-```
+Docker mounts a volume at `/data` so queue status and server audio survive `docker compose restart`.
 
-**On your phone:**
+### 3 · Import
 
-1. **Settings → Server** → paste that link
-2. Tap **+** → paste a Spotify playlist link
+1. **Settings → Server** → paste the API URL  
+2. Tap **+** → paste a Spotify **playlist, album, or track** link  
 3. Wait for downloads → **Play**
 
 Press `Ctrl+C` to stop the backend when done. Music stays on your phone.
 
-### 3 · Daily use
+### 4 · Daily use
 
-Open the app and play. No computer, no Wi-Fi required.
+Open the app and play offline. Home widget and notification controls work while a track is loaded.
 
 ---
 
 ## Requirements
 
 - [Docker](https://docs.docker.com/get-docker/)
-- [Python 3](https://www.python.org/downloads/) — used by the start script to find your Wi-Fi IP
-- Phone and computer on the **same Wi-Fi** during import
+- [Python 3](https://www.python.org/downloads/) — start script finds your Wi-Fi IP
+- Same Wi-Fi for phone + computer during import
 
 ---
+
+## Limits
+
+- Private Spotify **Liked Songs** are not scraped (no OAuth). Make a public playlist of likes if you need them.
+- Album art may need network until cached by the image library.
+- Matching uses YouTube search — occasional wrong matches; retry failed downloads from the playlist screen.
