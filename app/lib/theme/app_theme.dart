@@ -6,8 +6,8 @@ class AppColors {
   static const surface = Color(0xFF141418);
   static const surfaceElevated = Color(0xFF1C1C22);
   static const surfaceHighlight = Color(0xFF252530);
-  static const accent = Color(0xFF8B7CF6);
-  static const accentMuted = Color(0xFF6B5BC7);
+  static const accent = Color(0xFF2DD4BF);
+  static const accentMuted = Color(0xFF14B8A6);
   static const textPrimary = Color(0xFFF2F2F5);
   static const textSecondary = Color(0xFF9898A6);
   static const textMuted = Color(0xFF5C5C6A);
