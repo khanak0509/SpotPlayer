@@ -65,7 +65,7 @@ class ImportEmptyScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'Paste a public Spotify playlist link.',
+                  'Paste a public Spotify playlist, album, or track link.',
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: AppColors.textSecondary,
