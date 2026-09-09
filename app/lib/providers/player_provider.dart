@@ -11,6 +11,7 @@ import 'package:permission_handler/permission_handler.dart';
 
 import '../models/models.dart';
 import '../services/local_store.dart';
+import '../services/playback_session_store.dart';
 import '../services/server_connectivity.dart';
 import '../services/user_prefs_store.dart';
 import '../services/widget_service.dart';
@@ -112,11 +113,17 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
   StreamSubscription? _interruptionSub;
   StreamSubscription? _noisySub;
   Timer? _sleepTimer;
+  Timer? _persistTimer;
   final _rng = Random();
   bool _wasPlayingBeforeInterruption = false;
   bool _pausedByUser = false;
   bool _notificationPermissionAsked = false;
   bool _loadingPlaylist = false;
+  bool _restoringSession = false;
+  bool _crossfadeOutActive = false;
+  List<Track> _sourceOrder = [];
+
+  static const _crossfadeWindow = Duration(milliseconds: 2800);
 
   bool get _crossfadeEnabled => ref.read(userPrefsProvider).crossfade;
 
@@ -161,6 +168,8 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
 
     _posSub = _player.positionStream.listen((p) {
       state = state.copyWith(position: p);
+      _maybeCrossfadeOut(p);
+      _schedulePersist();
     });
     _durSub = _player.durationStream.listen((d) {
       if (d != null) state = state.copyWith(duration: d);
@@ -171,19 +180,131 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
             state.currentTrack,
             isPlaying: s.playing,
           );
+      _schedulePersist();
     });
-    _indexSub = _player.currentIndexStream.listen((index) {
+    _indexSub = _player.currentIndexStream.listen((index) async {
       if (_loadingPlaylist || index == null) return;
       if (index < 0 || index >= state.queue.length) return;
       final track = state.queue[index];
       if (state.currentTrack?.id == track.id && state.currentIndex == index) return;
+      _crossfadeOutActive = false;
       state = state.copyWith(currentTrack: track, currentIndex: index, position: Duration.zero);
+      if (_crossfadeEnabled) {
+        await _fadeVolume(from: 0, to: 1, steps: 14, stepMs: 40);
+      } else {
+        await _player.setVolume(1);
+      }
       ref.read(userPrefsProvider.notifier).addRecentTrack(track);
       ref.read(widgetServiceProvider).updateNowPlaying(track, isPlaying: _player.playing);
+      _schedulePersist();
     });
 
     await _player.setSpeed(prefs.playbackSpeed);
     await _player.setLoopMode(LoopMode.off);
+    try {
+      await _player.setAutomaticallyWaitsToMinimizeStalling(true);
+    } catch (_) {}
+  }
+
+  void _maybeCrossfadeOut(Duration position) {
+    if (!_crossfadeEnabled || _loadingPlaylist || !_player.playing || _crossfadeOutActive) return;
+    final duration = state.duration;
+    if (duration <= _crossfadeWindow) return;
+    if (!_player.hasNext && state.repeat != PlayerRepeatMode.all) return;
+    final remaining = duration - position;
+    if (remaining <= Duration.zero || remaining > _crossfadeWindow) return;
+    final t = remaining.inMilliseconds / _crossfadeWindow.inMilliseconds;
+    unawaited(_player.setVolume(t.clamp(0.05, 1.0)));
+  }
+
+  Future<void> _fadeVolume({
+    required double from,
+    required double to,
+    int steps = 12,
+    int stepMs = 35,
+  }) async {
+    if (steps <= 0) {
+      await _player.setVolume(to);
+      return;
+    }
+    await _player.setVolume(from);
+    for (var i = 1; i <= steps; i++) {
+      final v = from + (to - from) * (i / steps);
+      await _player.setVolume(v.clamp(0.0, 1.0));
+      await Future.delayed(Duration(milliseconds: stepMs));
+    }
+  }
+
+  void _schedulePersist() {
+    if (_restoringSession || _loadingPlaylist) return;
+    _persistTimer?.cancel();
+    _persistTimer = Timer(const Duration(milliseconds: 800), () {
+      unawaited(_persistSession());
+    });
+  }
+
+  Future<void> _persistSession() async {
+    if (!state.hasTrack || state.queue.isEmpty) {
+      await ref.read(playbackSessionProvider).clear();
+      return;
+    }
+    await ref.read(playbackSessionProvider).save(PlaybackSession(
+          queue: state.queue,
+          sourceOrder: _sourceOrder.isEmpty ? state.queue : _sourceOrder,
+          currentIndex: state.currentIndex,
+          positionMs: state.position.inMilliseconds,
+          shuffle: state.shuffle,
+          repeat: state.repeat,
+          playlistId: state.playlistId,
+          playlistName: state.playlistName,
+          playlistCover: state.playlistCover,
+        ));
+  }
+
+  /// Restore last queue/position after cold start. Loads paused (no autoplay).
+  Future<void> restoreSession() async {
+    if (state.hasTrack) return;
+    final saved = await ref.read(playbackSessionProvider).load();
+    if (saved == null || saved.isEmpty) return;
+
+    final store = ref.read(localStoreProvider);
+    final queue = saved.queue.where((t) => store.hasTrack(t.id)).toList();
+    if (queue.isEmpty) {
+      await ref.read(playbackSessionProvider).clear();
+      return;
+    }
+
+    _sourceOrder = saved.sourceOrder.where((t) => store.hasTrack(t.id)).toList();
+    if (_sourceOrder.isEmpty) _sourceOrder = List<Track>.from(queue);
+
+    var index = saved.currentIndex.clamp(0, queue.length - 1);
+    final wantedId = saved.currentIndex >= 0 && saved.currentIndex < saved.queue.length
+        ? saved.queue[saved.currentIndex].id
+        : null;
+    if (wantedId != null) {
+      final mapped = queue.indexWhere((t) => t.id == wantedId);
+      if (mapped >= 0) index = mapped;
+    }
+
+    _restoringSession = true;
+    try {
+      state = state.copyWith(
+        shuffle: saved.shuffle,
+        repeat: saved.repeat,
+        playlistId: saved.playlistId,
+        playlistName: saved.playlistName,
+        playlistCover: saved.playlistCover,
+      );
+      await _loadPlaylist(
+        queue,
+        initialIndex: index,
+        initialPosition: Duration(milliseconds: saved.positionMs.clamp(0, 1 << 30)),
+        autoplay: false,
+      );
+      _pausedByUser = true;
+    } finally {
+      _restoringSession = false;
+    }
   }
 
   Future<void> playTracks({
@@ -196,7 +317,6 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
   }) async {
     await _ensureNotificationPermission();
 
-    // Prefer local files so order is reliable offline; download tapped track if needed.
     final store = ref.read(localStoreProvider);
     Track? wanted;
     if (startIndex >= 0 && startIndex < tracks.length) {
@@ -208,8 +328,8 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
       }
     }
 
-    var queue = tracks.where((t) => store.hasTrack(t.id)).toList();
-    if (queue.isEmpty) {
+    final ordered = tracks.where((t) => store.hasTrack(t.id)).toList();
+    if (ordered.isEmpty) {
       state = state.copyWith(
         playError: ref.read(serverReachableProvider)
             ? 'No downloaded tracks yet'
@@ -218,9 +338,11 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
       return;
     }
 
+    _sourceOrder = List<Track>.from(ordered);
+    var queue = List<Track>.from(ordered);
     var playIndex = 0;
     if (shuffle) {
-      queue = List<Track>.from(queue)..shuffle(_rng);
+      queue.shuffle(_rng);
       if (wanted != null) {
         final idx = queue.indexWhere((t) => t.id == wanted!.id);
         if (idx > 0) {
@@ -297,8 +419,8 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
   }) async {
     final store = ref.read(localStoreProvider);
     _loadingPlaylist = true;
+    _crossfadeOutActive = false;
     try {
-      // Keep player queue and audio sources 1:1 so next/prev order never drifts.
       final playable = <Track>[];
       final children = <AudioSource>[];
       for (final track in queue) {
@@ -323,7 +445,10 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
       await session.setActive(true);
 
       await _player.setAudioSource(
-        ConcatenatingAudioSource(children: children),
+        ConcatenatingAudioSource(
+          children: children,
+          useLazyPreparation: true,
+        ),
         initialIndex: safeIndex,
         initialPosition: initialPosition,
       );
@@ -335,14 +460,8 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
                 ? LoopMode.all
                 : LoopMode.off,
       );
-      // Queue order is owned by us; keep engine shuffle off so AirPods next follows our list.
       await _player.setShuffleModeEnabled(false);
-
-      if (_crossfadeEnabled && autoplay) {
-        await _player.setVolume(0);
-      } else {
-        await _player.setVolume(1);
-      }
+      await _player.setVolume(1);
 
       final track = playable[safeIndex];
       state = state.copyWith(
@@ -355,18 +474,21 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
 
       if (autoplay) {
         _pausedByUser = false;
-        await _player.play();
         if (_crossfadeEnabled) {
-          for (var i = 0; i <= 10; i++) {
-            await _player.setVolume(i / 10);
-            await Future.delayed(const Duration(milliseconds: 20));
-          }
+          await _player.setVolume(0);
+          await _player.play();
+          await _fadeVolume(from: 0, to: 1, steps: 12, stepMs: 30);
+        } else {
+          await _player.play();
         }
+      } else {
+        await _player.pause();
       }
 
       await ref.read(userPrefsProvider.notifier).addRecentTrack(track);
       await ref.read(widgetServiceProvider).updateNowPlaying(track, isPlaying: _player.playing);
       if (autoplay) HapticFeedback.lightImpact();
+      _schedulePersist();
     } catch (_) {
       state = state.copyWith(isPlaying: false, playError: 'Playback failed');
     } finally {
@@ -384,14 +506,17 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
     } else {
       _pausedByUser = false;
       await AudioSession.instance.then((s) => s.setActive(true));
+      await _player.setVolume(1);
       await _player.play();
     }
     HapticFeedback.lightImpact();
+    _schedulePersist();
   }
 
   Future<void> pause() async {
     _pausedByUser = true;
     await _player.pause();
+    _schedulePersist();
   }
 
   Future<void> seek(Duration pos) => _player.seek(pos);
@@ -418,6 +543,7 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
       _pausedByUser = true;
       await _player.pause();
       state = state.copyWith(clearSleep: true, isPlaying: false);
+      _schedulePersist();
     });
     HapticFeedback.mediumImpact();
   }
@@ -455,12 +581,19 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
     if (state.queue.length <= 1) {
       state = state.copyWith(shuffle: enabling);
       HapticFeedback.selectionClick();
+      _schedulePersist();
       return;
     }
 
     final current = state.currentTrack;
-    var queue = List<Track>.from(state.queue);
+    final wasPlaying = _player.playing;
+    final pos = _player.position;
+
     if (enabling) {
+      if (_sourceOrder.isEmpty) {
+        _sourceOrder = List<Track>.from(state.queue);
+      }
+      var queue = List<Track>.from(state.queue);
       if (current != null) {
         queue.removeWhere((t) => t.id == current.id);
         queue.shuffle(_rng);
@@ -468,8 +601,6 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
       } else {
         queue.shuffle(_rng);
       }
-      final wasPlaying = _player.playing;
-      final pos = _player.position;
       state = state.copyWith(shuffle: true, queue: queue, currentIndex: 0);
       await _loadPlaylist(
         queue,
@@ -478,7 +609,19 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
         autoplay: wasPlaying,
       );
     } else {
-      state = state.copyWith(shuffle: false);
+      final source = _sourceOrder.isNotEmpty ? List<Track>.from(_sourceOrder) : List<Track>.from(state.queue);
+      var index = 0;
+      if (current != null) {
+        final idx = source.indexWhere((t) => t.id == current.id);
+        index = idx >= 0 ? idx : 0;
+      }
+      state = state.copyWith(shuffle: false, queue: source, currentIndex: index);
+      await _loadPlaylist(
+        source,
+        initialIndex: index,
+        initialPosition: pos,
+        autoplay: wasPlaying,
+      );
     }
     HapticFeedback.selectionClick();
   }
@@ -498,6 +641,7 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
               : LoopMode.off,
     );
     HapticFeedback.selectionClick();
+    _schedulePersist();
   }
 
   void reorderQueue(int oldIndex, int newIndex) {
@@ -505,6 +649,9 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
     if (newIndex > oldIndex) newIndex--;
     final item = queue.removeAt(oldIndex);
     queue.insert(newIndex, item);
+    if (!state.shuffle) {
+      _sourceOrder = List<Track>.from(queue);
+    }
     final currentId = state.currentTrack?.id;
     final newCurrent = currentId == null ? 0 : queue.indexWhere((t) => t.id == currentId);
     final wasPlaying = _player.playing;
@@ -522,11 +669,13 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
     final queue = List<Track>.from(state.queue);
     if (index < 0 || index >= queue.length) return;
     final removingCurrent = index == state.currentIndex;
-    queue.removeAt(index);
+    final removed = queue.removeAt(index);
+    _sourceOrder = _sourceOrder.where((t) => t.id != removed.id).toList();
     if (queue.isEmpty) {
       unawaited(_player.stop());
       state = const PlayerState();
       unawaited(ref.read(widgetServiceProvider).updateNowPlaying(null));
+      unawaited(ref.read(playbackSessionProvider).clear());
       return;
     }
     final currentId = state.currentTrack?.id;
@@ -547,11 +696,13 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
 
   Future<void> removeTrackFromQueue(String trackId) async {
     final queue = state.queue.where((t) => t.id != trackId).toList();
+    _sourceOrder = _sourceOrder.where((t) => t.id != trackId).toList();
     if (state.currentTrack?.id == trackId) {
       if (queue.isEmpty) {
         await _player.stop();
         state = const PlayerState();
         await ref.read(widgetServiceProvider).updateNowPlaying(null);
+        await ref.read(playbackSessionProvider).clear();
         return;
       }
       final nextIndex = state.currentIndex.clamp(0, queue.length - 1);
@@ -562,11 +713,13 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
     final currentId = state.currentTrack?.id;
     final newIndex = currentId == null ? 0 : queue.indexWhere((t) => t.id == currentId);
     state = state.copyWith(queue: queue, currentIndex: newIndex < 0 ? 0 : newIndex);
+    _schedulePersist();
   }
 
   @override
   void dispose() {
     _sleepTimer?.cancel();
+    _persistTimer?.cancel();
     _posSub?.cancel();
     _durSub?.cancel();
     _stateSub?.cancel();
