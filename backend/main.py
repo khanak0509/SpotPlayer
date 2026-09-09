@@ -6,7 +6,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from download_service import start_workers
+from playlist_store import init_store as init_playlist_store
 from routes import router
+from track_store import init_store as init_track_store
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -21,6 +23,8 @@ def _phone_api_url() -> str | None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    await init_playlist_store()
+    await init_track_store()
     await start_workers()
     url = _phone_api_url()
     if url:

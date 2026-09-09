@@ -9,3 +9,10 @@ services:
       DOWNLOAD_WORKERS: "3"
       PORT: "8000"
       HOST_IP: ${HOST_IP:-}
+      DATA_DIR: /data
+      TEMP_DIR: /data/audio
+    volumes:
+      - spotplayer_data:/data
+
+volumes:
+  spotplayer_data:
