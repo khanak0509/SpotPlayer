@@ -146,13 +146,10 @@ class LibraryNotifier extends StateNotifier<LibraryState> {
       return t;
     }).toList();
     final store = ref.read(localStoreProvider);
-    final ready = tracks.where((t) => store.hasTrack(t.id) || t.status == TrackStatus.ready).length;
+    final ready = tracks.where((t) => store.hasTrack(t.id)).length;
     final syncing = tracks.any((t) {
       if (store.hasTrack(t.id)) return false;
-      return t.status == TrackStatus.queued ||
-          t.status == TrackStatus.downloading ||
-          t.status == TrackStatus.resolving ||
-          t.status == TrackStatus.ready;
+      return t.status != TrackStatus.failed;
     });
     return PlaylistDetail(
       id: detail.id,
@@ -274,6 +271,7 @@ class LibraryNotifier extends StateNotifier<LibraryState> {
       readyCount: ready,
       syncing: syncing,
     ));
+    await store.reclaimOrphanTracks();
 
     ref.read(playerProvider.notifier).removeTrackFromQueue(trackId);
     ref.invalidate(playlistDetailProvider(playlistId));
@@ -287,15 +285,8 @@ class LibraryNotifier extends StateNotifier<LibraryState> {
   }
 }
 
-final playlistDetailProvider =
-    FutureProvider.family<PlaylistDetail, String>((ref, id) async {
-  final store = ref.read(localStoreProvider);
-  var detail = store.getPlaylist(id);
-  if (detail == null) throw Exception('Playlist not found');
-  if (!ref.read(serverReachableProvider)) return detail;
-  try {
-    return await ref.read(trackSyncProvider).refreshPlaylist(detail);
-  } catch (_) {
-    return detail;
-  }
+final playlistDetailProvider = Provider.family<PlaylistDetail?, String>((ref, id) {
+  ref.watch(libraryProvider);
+  ref.watch(libraryTickProvider);
+  return ref.read(localStoreProvider).getPlaylist(id);
 });

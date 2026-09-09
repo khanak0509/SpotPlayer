@@ -19,6 +19,7 @@ class PlaylistSyncProgress extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    ref.watch(libraryTickProvider);
     final total = tracks.length;
     if (total == 0) return const SizedBox.shrink();
 
@@ -26,26 +27,34 @@ class PlaylistSyncProgress extends ConsumerWidget {
     final store = ref.read(localStoreProvider);
     final saved = store.localSavedCount(tracks);
     final failed = tracks.where((t) => !store.hasTrack(t.id) && t.status == TrackStatus.failed).length;
+    final saving = ref.read(trackSyncProvider).activeDownloadCount;
+    final pending = total - saved - failed;
+    final progress = total == 0 ? 0.0 : saved / total;
+    final done = saved + failed >= total && saving == 0;
 
     if (!reachable && saved < total) {
       return Padding(
         padding: const EdgeInsets.fromLTRB(24, 0, 24, 4),
         child: Text(
-          saved > 0
-              ? '$saved / $total saved offline · start backend to download rest'
-              : 'Start backend with start.sh to download tracks',
+          saved > 0 ? '$saved / $total on phone' : 'Server offline',
           textAlign: TextAlign.center,
-          style: const TextStyle(color: AppColors.textSecondary, fontSize: 12, height: 1.4),
+          style: const TextStyle(color: Colors.white70, fontSize: 12, height: 1.4),
         ),
       );
     }
 
-    final ready = tracks.where((t) => t.status == TrackStatus.ready).length;
-    final downloading = tracks.where((t) => t.status == TrackStatus.downloading).length;
-    final queued = tracks.where((t) =>
-        t.status == TrackStatus.queued || t.status == TrackStatus.resolving).length;
-    final progress = saved / total;
-    final done = saved + failed >= total && downloading == 0 && queued == 0;
+    String status;
+    if (failed > 0 && pending == 0 && saving == 0) {
+      status = '$failed failed';
+    } else if (saving > 0) {
+      status = 'Saving $saving…';
+    } else if (pending > 0) {
+      status = 'Preparing…';
+    } else if (done && saved == total) {
+      status = 'All on phone';
+    } else {
+      status = '';
+    }
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 0, 24, 4),
@@ -55,7 +64,7 @@ class PlaylistSyncProgress extends ConsumerWidget {
           ClipRRect(
             borderRadius: BorderRadius.circular(3),
             child: LinearProgressIndicator(
-              value: done ? 1.0 : progress.clamp(0.02, 1.0),
+              value: done ? 1.0 : progress.clamp(0.0, 1.0),
               minHeight: 5,
               backgroundColor: AppColors.surfaceHighlight,
               color: failed > 0 && saved == 0
@@ -67,41 +76,22 @@ class PlaylistSyncProgress extends ConsumerWidget {
           Row(
             children: [
               Text(
-                '$saved / $total downloaded',
+                '$saved / $total on phone',
                 style: const TextStyle(
-                  color: AppColors.textPrimary,
+                  color: Colors.white,
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
                 ),
               ),
               const Spacer(),
-              if (failed > 0)
+              if (status.isNotEmpty)
                 Text(
-                  '$failed failed',
-                  style: const TextStyle(color: AppColors.error, fontSize: 12, fontWeight: FontWeight.w500),
-                )
-              else if (downloading > 0)
-                Text(
-                  '$downloading downloading',
+                  status,
                   style: TextStyle(
-                    color: AppColors.textSecondary.withValues(alpha: 0.9),
+                    color: failed > 0 && pending == 0 ? AppColors.error : Colors.white,
                     fontSize: 12,
-                    fontWeight: FontWeight.w500,
+                    fontWeight: FontWeight.w600,
                   ),
-                )
-              else if (queued > 0)
-                Text(
-                  '$queued queued · $ready ready on server',
-                  style: TextStyle(
-                    color: AppColors.textSecondary.withValues(alpha: 0.9),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                  ),
-                )
-              else if (saved == total)
-                const Text(
-                  'All downloaded',
-                  style: TextStyle(color: AppColors.success, fontSize: 12, fontWeight: FontWeight.w500),
                 ),
             ],
           ),
@@ -113,10 +103,10 @@ class PlaylistSyncProgress extends ConsumerWidget {
                 onPressed: () {
                   ref.read(libraryProvider.notifier).retryFailedTracks(playlistId!);
                 },
-                icon: const Icon(Icons.refresh_rounded, size: 18, color: AppColors.accent),
+                icon: const Icon(Icons.refresh_rounded, size: 18, color: Colors.white),
                 label: Text(
-                  'Retry $failed failed',
-                  style: const TextStyle(color: AppColors.accent, fontWeight: FontWeight.w600),
+                  failed == 1 ? 'Retry failed' : 'Retry all failed ($failed)',
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
                 ),
               ),
             ),

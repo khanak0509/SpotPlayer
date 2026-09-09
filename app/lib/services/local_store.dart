@@ -58,7 +58,31 @@ class LocalStore {
     return _playlists!.put(detail.id, jsonEncode(map));
   }
 
-  Future<void> deletePlaylist(String id) => _playlists!.delete(id);
+  Future<void> deletePlaylist(String id) async {
+    await _playlists!.delete(id);
+    await reclaimOrphanTracks();
+  }
+
+  /// Deletes local MP3s that no remaining playlist references.
+  Future<int> reclaimOrphanTracks({Set<String> keepIds = const {}}) async {
+    final referenced = <String>{...keepIds};
+    for (final key in _playlists!.keys) {
+      final detail = getPlaylist(key as String);
+      if (detail == null) continue;
+      for (final track in detail.tracks) {
+        referenced.add(track.id);
+      }
+    }
+
+    var removed = 0;
+    for (final key in _tracks!.keys.toList()) {
+      final trackId = key as String;
+      if (referenced.contains(trackId)) continue;
+      await deleteTrackPath(trackId);
+      removed++;
+    }
+    return removed;
+  }
 
   bool hasTrack(String trackId) {
     final path = _tracks!.get(trackId);
@@ -159,13 +183,10 @@ class LocalStore {
       return t;
     }).toList();
 
-    final ready = tracks.where((t) => t.status == TrackStatus.ready || hasTrack(t.id)).length;
+    final ready = tracks.where((t) => hasTrack(t.id)).length;
     final syncing = tracks.any((t) {
       if (hasTrack(t.id)) return false;
-      return t.status == TrackStatus.queued ||
-          t.status == TrackStatus.downloading ||
-          t.status == TrackStatus.resolving ||
-          t.status == TrackStatus.ready;
+      return t.status != TrackStatus.failed;
     });
 
     return PlaylistDetail(
@@ -222,12 +243,20 @@ class LocalStore {
 
 final trackSyncProvider = Provider((ref) => TrackSyncService(ref));
 
+/// Bumps when a local file is saved/removed so progress UI rebuilds.
+final libraryTickProvider = StateProvider<int>((ref) => 0);
+
 class TrackSyncService {
   TrackSyncService(this.ref);
 
   final Ref ref;
   final _activeDownloads = <String, Future<String?>>{};
 
+  int get activeDownloadCount => _activeDownloads.length;
+
+  void _tick() {
+    ref.read(libraryTickProvider.notifier).state++;
+  }
   Future<void> queueTracks(List<Track> tracks) async {
     final store = ref.read(localStoreProvider);
     final missing = tracks.where((t) => !store.hasTrack(t.id)).toList();
@@ -263,13 +292,17 @@ class TrackSyncService {
 
     final toDownload = merged.tracks
         .where((t) => !store.hasTrack(t.id) && t.status == TrackStatus.ready)
-        .take(3)
         .toList();
 
-    for (final track in toDownload) {
-      try {
-        await downloadTrack(track);
-      } catch (_) {}
+    // Parallel pull — cap in-flight downloads via _activeDownloads.
+    const batchSize = 4;
+    for (var i = 0; i < toDownload.length; i += batchSize) {
+      final chunk = toDownload.skip(i).take(batchSize);
+      await Future.wait(chunk.map((track) async {
+        try {
+          await downloadTrack(track);
+        } catch (_) {}
+      }));
     }
 
     final updatedStatuses = await fetchStatuses(detail.tracks);
@@ -286,15 +319,16 @@ class TrackSyncService {
   }
 
   PlaylistDetail _markReady(PlaylistDetail detail, String trackId) {
+    final store = ref.read(localStoreProvider);
     final tracks = detail.tracks.map((t) {
       if (t.id == trackId) return t.copyWith(status: TrackStatus.ready);
       return t;
     }).toList();
-    final ready = tracks.where((t) => t.status == TrackStatus.ready).length;
-    final syncing = tracks.any((t) =>
-        t.status == TrackStatus.queued ||
-        t.status == TrackStatus.downloading ||
-        t.status == TrackStatus.resolving);
+    final ready = tracks.where((t) => store.hasTrack(t.id)).length;
+    final syncing = tracks.any((t) {
+      if (store.hasTrack(t.id)) return false;
+      return t.status != TrackStatus.failed;
+    });
     return PlaylistDetail(
       id: detail.id,
       name: detail.name,
@@ -316,10 +350,14 @@ class TrackSyncService {
 
     final future = _downloadTrackOnce(track);
     _activeDownloads[track.id] = future;
+    _tick();
     try {
-      return await future;
+      final path = await future;
+      _tick();
+      return path;
     } finally {
       _activeDownloads.remove(track.id);
+      _tick();
     }
   }
 
