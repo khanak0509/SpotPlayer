@@ -2,28 +2,31 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
 
+/// Compact offline hint — no long instructions.
 class OfflineBanner extends StatelessWidget {
   const OfflineBanner({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceElevated,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.divider),
-      ),
-      child: const Row(
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: Row(
         children: [
-          Icon(Icons.cloud_off_rounded, color: AppColors.textSecondary, size: 20),
-          SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              'Backend not running. Run start.sh on your computer, then reopen the app.',
-              style: TextStyle(color: AppColors.textSecondary, fontSize: 13, height: 1.35),
+          Container(
+            width: 8,
+            height: 8,
+            decoration: const BoxDecoration(
+              color: AppColors.textMuted,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 8),
+          const Text(
+            'Not connected',
+            style: TextStyle(
+              color: Colors.white70,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
             ),
           ),
         ],

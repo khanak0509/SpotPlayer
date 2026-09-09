@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../services/server_connectivity.dart';
 import '../services/settings_store.dart';
 import '../theme/app_theme.dart';
 import '../widgets/scale_button.dart';
@@ -15,6 +16,7 @@ class ServerSetupScreen extends ConsumerStatefulWidget {
 class _ServerSetupScreenState extends ConsumerState<ServerSetupScreen> {
   final _controller = TextEditingController();
   String? _error;
+  bool _connecting = false;
 
   @override
   void dispose() {
@@ -22,16 +24,26 @@ class _ServerSetupScreenState extends ConsumerState<ServerSetupScreen> {
     super.dispose();
   }
 
-  Future<void> _save() async {
+  Future<void> _connect() async {
     final url = SettingsStore.normalizeServerUrl(_controller.text);
     if (url.isEmpty) {
-      setState(() => _error = 'Enter the URL from start.sh');
+      setState(() => _error = 'Paste the URL from start.sh');
       return;
     }
+    setState(() {
+      _connecting = true;
+      _error = null;
+    });
     await ref.read(settingsStoreProvider).setServerUrl(url);
     ref.read(serverUrlProvider.notifier).state = url;
-    setState(() => _error = null);
-    if (mounted && Navigator.canPop(context)) {
+    final ok = await ref.read(serverReachableProvider.notifier).refresh();
+    if (!mounted) return;
+    setState(() => _connecting = false);
+    if (!ok) {
+      setState(() => _error = 'Not reachable — check Wi‑Fi / start.sh');
+      return;
+    }
+    if (Navigator.canPop(context)) {
       Navigator.pop(context);
     }
   }
@@ -58,7 +70,7 @@ class _ServerSetupScreenState extends ConsumerState<ServerSetupScreen> {
               ),
               const SizedBox(height: 12),
               Text(
-                'Run start.sh on your computer, then paste the URL it prints.',
+                'Run start.sh, then paste the URL.',
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: AppColors.textSecondary,
@@ -69,6 +81,7 @@ class _ServerSetupScreenState extends ConsumerState<ServerSetupScreen> {
               TextField(
                 controller: _controller,
                 autofocus: true,
+                enabled: !_connecting,
                 style: const TextStyle(color: AppColors.textPrimary, fontSize: 15),
                 decoration: InputDecoration(
                   hintText: SettingsStore.serverUrlExample,
@@ -85,11 +98,11 @@ class _ServerSetupScreenState extends ConsumerState<ServerSetupScreen> {
                 keyboardType: TextInputType.url,
                 autocorrect: false,
                 textInputAction: TextInputAction.done,
-                onSubmitted: (_) => _save(),
+                onSubmitted: (_) => _connect(),
               ),
               const SizedBox(height: 16),
               ScaleButton(
-                onPressed: _save,
+                onPressed: _connecting ? null : _connect,
                 child: Container(
                   height: 52,
                   decoration: BoxDecoration(
@@ -97,14 +110,23 @@ class _ServerSetupScreenState extends ConsumerState<ServerSetupScreen> {
                     borderRadius: BorderRadius.circular(14),
                   ),
                   alignment: Alignment.center,
-                  child: const Text(
-                    'Continue',
-                    style: TextStyle(
-                      color: AppColors.background,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 16,
-                    ),
-                  ),
+                  child: _connecting
+                      ? const SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppColors.background,
+                          ),
+                        )
+                      : const Text(
+                          'Connect',
+                          style: TextStyle(
+                            color: AppColors.background,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 16,
+                          ),
+                        ),
                 ),
               ),
               const Spacer(flex: 3),

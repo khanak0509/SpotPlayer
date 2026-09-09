@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -5,8 +7,10 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:just_audio_background/just_audio_background.dart';
 
 import 'providers/library_provider.dart';
+import 'providers/player_provider.dart';
 import 'screens/shell.dart';
 import 'services/local_store.dart';
+import 'services/playback_session_store.dart';
 import 'services/server_connectivity.dart';
 import 'services/settings_store.dart' show bootstrapServerUrl, settingsStoreProvider, serverUrlProvider;
 import 'services/user_prefs_store.dart';
@@ -48,6 +52,8 @@ class SpotPlayerApp extends ConsumerStatefulWidget {
 }
 
 class _SpotPlayerAppState extends ConsumerState<SpotPlayerApp> with WidgetsBindingObserver {
+  Timer? _pingTimer;
+
   @override
   void initState() {
     super.initState();
@@ -58,6 +64,7 @@ class _SpotPlayerAppState extends ConsumerState<SpotPlayerApp> with WidgetsBindi
   Future<void> _bootstrap() async {
     await ref.read(localStoreProvider).init();
     await ref.read(userPrefsProvider.notifier).init();
+    await ref.read(playbackSessionProvider).init();
     await ref.read(settingsStoreProvider).init();
     ref.read(serverUrlProvider.notifier).state =
         ref.read(settingsStoreProvider).serverUrl.isNotEmpty
@@ -66,9 +73,14 @@ class _SpotPlayerAppState extends ConsumerState<SpotPlayerApp> with WidgetsBindi
     await ref.read(widgetServiceProvider).init();
     await ref.read(serverReachableProvider.notifier).refresh();
     await ref.read(libraryProvider.notifier).load();
+    await ref.read(playerProvider.notifier).restoreSession();
     if (ref.read(serverReachableProvider)) {
       ref.read(libraryProvider.notifier).autoSyncAllIfEnabled();
     }
+    _pingTimer?.cancel();
+    _pingTimer = Timer.periodic(const Duration(seconds: 20), (_) {
+      ref.read(serverReachableProvider.notifier).refresh();
+    });
   }
 
   @override
@@ -85,6 +97,7 @@ class _SpotPlayerAppState extends ConsumerState<SpotPlayerApp> with WidgetsBindi
 
   @override
   void dispose() {
+    _pingTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }

@@ -19,7 +19,7 @@ class AppShell extends ConsumerWidget {
     if (!await ensureServerReachable(ref)) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Start backend with start.sh first')),
+          const SnackBar(content: Text('Not connected')),
         );
       }
       return;

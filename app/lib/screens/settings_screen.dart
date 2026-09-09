@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/library_provider.dart';
 import '../services/local_store.dart';
+import '../services/server_connectivity.dart';
 import '../services/settings_store.dart';
 import '../services/user_prefs_store.dart';
 import '../theme/app_theme.dart';
@@ -20,6 +21,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   int _trackCount = 0;
   int _playlistCount = 0;
   bool _loading = true;
+  bool _connecting = false;
   late final TextEditingController _serverController;
 
   @override
@@ -59,15 +61,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     return '${mb.toStringAsFixed(0)} MB';
   }
 
-  Future<void> _saveServerUrl() async {
+  Future<void> _connectServer() async {
     final url = SettingsStore.normalizeServerUrl(_serverController.text);
-    if (url == ref.read(serverUrlProvider)) {
-      _serverController.text = url;
-      return;
-    }
+    if (url.isEmpty) return;
+    setState(() => _connecting = true);
     await ref.read(settingsStoreProvider).setServerUrl(url);
     ref.read(serverUrlProvider.notifier).state = url;
     _serverController.text = url;
+    final ok = await ref.read(serverReachableProvider.notifier).refresh();
+    if (mounted) {
+      setState(() => _connecting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(ok ? 'Connected' : 'Not reachable')),
+      );
+    }
   }
 
   Future<void> _clearLocalCache() async {
@@ -95,6 +102,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final reachable = ref.watch(serverReachableProvider);
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(title: const Text('Settings')),
@@ -104,27 +112,64 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           const _SectionHeader('Server'),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: TextField(
-              controller: _serverController,
-              style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
-              decoration: InputDecoration(
-                hintText: SettingsStore.serverUrlExample,
-                helperText: 'Same Wi-Fi as your computer when importing.',
-                helperStyle: const TextStyle(color: AppColors.textMuted, fontSize: 12),
-                hintStyle: const TextStyle(color: AppColors.textMuted),
-                filled: true,
-                fillColor: AppColors.surfaceHighlight,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: reachable ? AppColors.success : AppColors.textMuted,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      reachable ? 'Connected' : 'Not connected',
+                      style: const TextStyle(color: Colors.white70, fontSize: 13),
+                    ),
+                  ],
                 ),
-              ),
-              autocorrect: false,
-              keyboardType: TextInputType.url,
-              textInputAction: TextInputAction.done,
-              onSubmitted: (_) => _saveServerUrl(),
-              onEditingComplete: _saveServerUrl,
-              onTapOutside: (_) => _saveServerUrl(),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: _serverController,
+                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
+                  decoration: InputDecoration(
+                    hintText: SettingsStore.serverUrlExample,
+                    hintStyle: const TextStyle(color: AppColors.textMuted),
+                    filled: true,
+                    fillColor: AppColors.surfaceHighlight,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                  autocorrect: false,
+                  keyboardType: TextInputType.url,
+                  textInputAction: TextInputAction.done,
+                  onSubmitted: (_) => _connectServer(),
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  height: 44,
+                  child: FilledButton(
+                    onPressed: _connecting ? null : _connectServer,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: AppColors.background,
+                    ),
+                    child: _connecting
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : Text(reachable ? 'Reconnect' : 'Connect'),
+                  ),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 20),
@@ -136,8 +181,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             onChanged: (v) => ref.read(userPrefsProvider.notifier).setAutoSync(v),
           ),
           SwitchListTile(
-            title: const Text('Crossfade'),
-            subtitle: const Text('Smooth transition between songs'),
+            title: const Text('Smooth transitions'),
+            subtitle: const Text('Gapless playback with a short fade between tracks'),
             value: ref.watch(userPrefsProvider).crossfade,
             onChanged: (v) => ref.read(userPrefsProvider.notifier).setCrossfade(v),
           ),
