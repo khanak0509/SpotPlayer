@@ -39,12 +39,30 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
   @override
   void initState() {
     super.initState();
-    _searchController.addListener(() => setState(() {}));
-    _pollTimer = Timer.periodic(const Duration(seconds: 5), (_) {
-      if (!ref.read(serverReachableProvider)) return;
-      ref.invalidate(playlistDetailProvider(widget.playlistId));
-      ref.read(libraryProvider.notifier).load();
+    _searchController.addListener(() {
+      if (mounted) setState(() {});
     });
+    // Wait until the open animation finishes before network sync (avoids laggy slide).
+    Future.delayed(const Duration(milliseconds: 320), () {
+      if (!mounted) return;
+      _refreshInBackground();
+      _pollTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+        _refreshInBackground();
+      });
+    });
+  }
+
+  Future<void> _refreshInBackground() async {
+    if (!mounted) return;
+    if (!ref.read(serverReachableProvider)) return;
+    final store = ref.read(localStoreProvider);
+    final cached = store.getPlaylist(widget.playlistId);
+    if (cached == null) return;
+    try {
+      await ref.read(trackSyncProvider).refreshPlaylist(cached);
+      if (!mounted) return;
+      await ref.read(libraryProvider.notifier).load();
+    } catch (_) {}
   }
 
   @override
@@ -154,44 +172,36 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final cached = ref.watch(localStoreProvider).getPlaylist(widget.playlistId);
+    final detail = ref.watch(playlistDetailProvider(widget.playlistId));
     final reachable = ref.watch(serverReachableProvider);
+    ref.watch(libraryTickProvider);
 
-    if (cached == null) {
+    ref.listen<PlaylistDetail?>(playlistDetailProvider(widget.playlistId), (prev, next) {
+      if (next != null) _syncTracks(next);
+    });
+
+    if (detail == null) {
       return const Scaffold(
         backgroundColor: AppColors.background,
         body: Center(child: Text('Playlist not found', style: TextStyle(color: AppColors.textMuted))),
       );
     }
 
-    if (!reachable) {
-      _syncTracks(cached);
-      return _buildContent(context, _detailWithOrderedTracks(cached), offline: true);
+    if (_orderedTracks == null) {
+      _orderedTracks = List<Track>.from(detail.tracks);
+      _tracksPlaylistId = detail.id;
     }
 
-    final asyncDetail = ref.watch(playlistDetailProvider(widget.playlistId));
-
-    return asyncDetail.when(
-      loading: () {
-        _syncTracks(cached);
-        return _buildContent(context, _detailWithOrderedTracks(cached));
-      },
-      error: (e, _) {
-        _syncTracks(cached);
-        return _buildContent(context, _detailWithOrderedTracks(cached), offline: true);
-      },
-      data: (detail) {
-        _syncTracks(detail);
-        return _buildContent(context, _detailWithOrderedTracks(detail));
-      },
+    return _buildContent(
+      context,
+      _detailWithOrderedTracks(detail),
+      offline: !reachable,
     );
   }
 
   Widget _buildContent(BuildContext context, PlaylistDetail detail, {bool offline = false}) {
     final store = ref.read(localStoreProvider);
-    final readyTracks = detail.tracks
-        .where((t) => store.hasTrack(t.id) || t.status == TrackStatus.ready)
-        .toList();
+    final readyTracks = detail.tracks.where((t) => store.hasTrack(t.id)).toList();
     final player = ref.watch(playerProvider);
     final isThisPlaylist = player.playlistId == detail.id;
     final showPause = isThisPlaylist && player.hasTrack && player.isPlaying;

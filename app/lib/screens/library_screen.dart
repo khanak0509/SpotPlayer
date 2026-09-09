@@ -96,7 +96,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                   if (!await ensureServerReachable(ref)) {
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Start backend with start.sh first')),
+                        const SnackBar(content: Text('Not connected')),
                       );
                     }
                     return;
@@ -270,8 +270,28 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                     onTap: () {
                       Navigator.push(
                         context,
-                        MaterialPageRoute(
-                          builder: (_) => PlaylistDetailScreen(playlistId: playlist.id),
+                        PageRouteBuilder<void>(
+                          transitionDuration: const Duration(milliseconds: 260),
+                          reverseTransitionDuration: const Duration(milliseconds: 220),
+                          pageBuilder: (_, __, ___) =>
+                              PlaylistDetailScreen(playlistId: playlist.id),
+                          transitionsBuilder: (_, animation, __, child) {
+                            final curved = CurvedAnimation(
+                              parent: animation,
+                              curve: Curves.easeOutCubic,
+                              reverseCurve: Curves.easeInCubic,
+                            );
+                            return FadeTransition(
+                              opacity: curved,
+                              child: SlideTransition(
+                                position: Tween<Offset>(
+                                  begin: const Offset(0.04, 0),
+                                  end: Offset.zero,
+                                ).animate(curved),
+                                child: child,
+                              ),
+                            );
+                          },
                         ),
                       );
                     },

@@ -18,22 +18,15 @@ class PlaylistCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      onLongPress: onLongPress,
-      child: Container(
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.25),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        clipBehavior: Clip.antiAlias,
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(16),
+      clipBehavior: Clip.antiAlias,
+      elevation: 2,
+      shadowColor: Colors.black54,
+      child: InkWell(
+        onTap: onTap,
+        onLongPress: onLongPress,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -45,6 +38,7 @@ class PlaylistCard extends StatelessWidget {
                     CachedNetworkImage(
                       imageUrl: playlist.coverUrl!,
                       fit: BoxFit.cover,
+                      memCacheWidth: 400,
                       errorWidget: (_, __, ___) => _placeholder(),
                     )
                   else
@@ -64,7 +58,7 @@ class PlaylistCard extends StatelessWidget {
                           style: const TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
-                            color: AppColors.accent,
+                            color: Colors.white,
                           ),
                         ),
                       ),

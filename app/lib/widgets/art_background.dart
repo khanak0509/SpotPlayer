@@ -106,12 +106,35 @@ class ArtGradientHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Lightweight header — no blur / palette (those stutter the open transition).
     return SizedBox(
       height: height,
-      child: ArtBackground(
-        imageUrl: imageUrl,
-        blurSigma: 50,
-        child: const SizedBox.expand(),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          Container(color: AppColors.surface),
+          if (imageUrl != null)
+            CachedNetworkImage(
+              imageUrl: imageUrl!,
+              fit: BoxFit.cover,
+              memCacheWidth: 600,
+              errorWidget: (_, __, ___) => const SizedBox.shrink(),
+            ),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  AppColors.background.withValues(alpha: 0.15),
+                  AppColors.background.withValues(alpha: 0.55),
+                  AppColors.background,
+                ],
+                stops: const [0.0, 0.55, 1.0],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
