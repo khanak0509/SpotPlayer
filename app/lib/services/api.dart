@@ -2,20 +2,23 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/models.dart';
+import 'settings_store.dart';
 
-final apiProvider = Provider((ref) => ApiService());
+final apiProvider = Provider((ref) {
+  final baseUrl = ref.watch(serverUrlProvider);
+  return ApiService(baseUrl: baseUrl);
+});
 
 class ApiService {
-  static const defaultBaseUrl = 'https://spotplayer-api.onrender.com/api';
+  static const serverUrlExample = SettingsStore.serverUrlExample;
   static const coldStartTimeout = Duration(seconds: 90);
   static const normalTimeout = Duration(seconds: 30);
 
-  late Dio _dio;
-  final String baseUrl = defaultBaseUrl;
+  ApiService({required this.baseUrl});
 
-  Future<void> init() async {
-    _dio = _buildDio(normalTimeout);
-  }
+  final String baseUrl;
+
+  Dio get _dio => _buildDio(normalTimeout);
 
   Dio _buildDio(Duration timeout) => Dio(BaseOptions(
         baseUrl: baseUrl,
@@ -88,11 +91,12 @@ class ApiService {
   }
 
   Future<bool> ping() async {
+    if (baseUrl.isEmpty) return false;
     try {
       final dio = Dio(BaseOptions(
         baseUrl: baseUrl.replaceAll('/api', ''),
-        connectTimeout: coldStartTimeout,
-        receiveTimeout: coldStartTimeout,
+        connectTimeout: const Duration(seconds: 4),
+        receiveTimeout: const Duration(seconds: 4),
       ));
       await dio.get('/health');
       return true;

@@ -3,7 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/library_provider.dart';
 import '../services/local_store.dart';
+import '../services/settings_store.dart';
+import '../services/user_prefs_store.dart';
 import '../theme/app_theme.dart';
+import 'onboarding_screen.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -17,11 +20,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   int _trackCount = 0;
   int _playlistCount = 0;
   bool _loading = true;
+  late final TextEditingController _serverController;
 
   @override
   void initState() {
     super.initState();
+    _serverController = TextEditingController(text: ref.read(serverUrlProvider));
     _load();
+  }
+
+  @override
+  void dispose() {
+    _serverController.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -48,6 +59,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     return '${mb.toStringAsFixed(0)} MB';
   }
 
+  Future<void> _saveServerUrl() async {
+    final url = SettingsStore.normalizeServerUrl(_serverController.text);
+    if (url == ref.read(serverUrlProvider)) {
+      _serverController.text = url;
+      return;
+    }
+    await ref.read(settingsStoreProvider).setServerUrl(url);
+    ref.read(serverUrlProvider.notifier).state = url;
+    _serverController.text = url;
+  }
+
   Future<void> _clearLocalCache() async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -66,7 +88,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
     if (confirmed == true) {
       await ref.read(localStoreProvider).clearAllTracks();
-      ref.read(libraryProvider.notifier).load();
+      await ref.read(libraryProvider.notifier).load();
       _load();
     }
   }
@@ -79,6 +101,52 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
         children: [
+          const _SectionHeader('Server'),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: TextField(
+              controller: _serverController,
+              style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
+              decoration: InputDecoration(
+                hintText: SettingsStore.serverUrlExample,
+                helperText: 'Same Wi-Fi as your computer when importing.',
+                helperStyle: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+                hintStyle: const TextStyle(color: AppColors.textMuted),
+                filled: true,
+                fillColor: AppColors.surfaceHighlight,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+              autocorrect: false,
+              keyboardType: TextInputType.url,
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) => _saveServerUrl(),
+              onEditingComplete: _saveServerUrl,
+              onTapOutside: (_) => _saveServerUrl(),
+            ),
+          ),
+          const SizedBox(height: 20),
+          const _SectionHeader('Playback'),
+          SwitchListTile(
+            title: const Text('Auto-sync playlists'),
+            subtitle: const Text('Check Spotify for new songs when app opens'),
+            value: ref.watch(userPrefsProvider).autoSync,
+            onChanged: (v) => ref.read(userPrefsProvider.notifier).setAutoSync(v),
+          ),
+          SwitchListTile(
+            title: const Text('Crossfade'),
+            subtitle: const Text('Smooth transition between songs'),
+            value: ref.watch(userPrefsProvider).crossfade,
+            onChanged: (v) => ref.read(userPrefsProvider.notifier).setCrossfade(v),
+          ),
+          ListTile(
+            title: const Text('Show onboarding tips'),
+            trailing: const Icon(Icons.chevron_right_rounded),
+            onTap: () => showOnboardingTips(context),
+          ),
+          const SizedBox(height: 20),
           _SectionHeader('Storage'),
           if (_loading)
             const Padding(
@@ -97,7 +165,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
           ],
           const SizedBox(height: 16),
-          _SectionHeader('About'),
+          const _SectionHeader('About'),
           const _SettingsTile(
             title: 'SpotPlayer',
             subtitle: 'v1.0.0',

@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/models.dart';
 import '../providers/library_provider.dart';
+import '../services/settings_store.dart';
 import '../theme/app_theme.dart';
 import 'scale_button.dart';
 
@@ -17,44 +17,24 @@ class ImportSheet extends ConsumerStatefulWidget {
 class _ImportSheetState extends ConsumerState<ImportSheet> {
   final _controller = TextEditingController();
   bool _submitting = false;
-  bool _waking = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _checkClipboard();
-  }
-
-  Future<void> _checkClipboard() async {
-    final data = await Clipboard.getData(Clipboard.kTextPlain);
-    final text = data?.text?.trim() ?? '';
-    if (text.contains('open.spotify.com/playlist/') ||
-        text.contains('spotify.com/playlist/')) {
-      _controller.text = text;
-    }
-  }
 
   Future<void> _submit() async {
     final url = _controller.text.trim();
     if (url.isEmpty || _submitting) return;
-    setState(() {
-      _submitting = true;
-      _waking = false;
-    });
 
-    final wakeTimer = Future.delayed(const Duration(seconds: 4), () {
-      if (mounted && _submitting) setState(() => _waking = true);
-    });
+    if (!ref.read(settingsStoreProvider).hasServerUrl) {
+      if (mounted) Navigator.pop(context);
+      return;
+    }
+
+    setState(() => _submitting = true);
 
     final result = await ref.read(libraryProvider.notifier).importPlaylist(url);
-    await wakeTimer;
 
     if (mounted) {
-      setState(() {
-        _submitting = false;
-        _waking = false;
-      });
+      setState(() => _submitting = false);
       if (result != null) {
+        _controller.clear();
         Navigator.pop(context, result);
       } else {
         final err = ref.read(libraryProvider).error;
@@ -134,9 +114,7 @@ class _ImportSheetState extends ConsumerState<ImportSheet> {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  _waking
-                      ? 'Server is waking up, this can take up to a minute…'
-                      : 'Resolving playlist…',
+                  'Importing…',
                   textAlign: TextAlign.center,
                   style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
                 ),

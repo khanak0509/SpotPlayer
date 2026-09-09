@@ -5,13 +5,28 @@ import '../widgets/scale_button.dart';
 
 class ImportEmptyScreen extends StatelessWidget {
   final VoidCallback onImport;
+  final VoidCallback? onOpenSettings;
 
-  const ImportEmptyScreen({super.key, required this.onImport});
+  const ImportEmptyScreen({
+    super.key,
+    required this.onImport,
+    this.onOpenSettings,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
+      appBar: AppBar(
+        actions: [
+          if (onOpenSettings != null)
+            IconButton(
+              icon: const Icon(Icons.settings_rounded),
+              tooltip: 'Settings',
+              onPressed: onOpenSettings,
+            ),
+        ],
+      ),
       body: SafeArea(
         child: Center(
           child: Padding(
@@ -50,7 +65,7 @@ class ImportEmptyScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'Paste any public Spotify playlist link and we\'ll handle the rest.',
+                  'Paste a public Spotify playlist link.',
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: AppColors.textSecondary,

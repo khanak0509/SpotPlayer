@@ -8,6 +8,8 @@ import 'package:path_provider/path_provider.dart';
 
 import '../models/models.dart';
 import 'api.dart';
+import 'server_connectivity.dart';
+import 'user_prefs_store.dart';
 
 final localStoreProvider = Provider((ref) => LocalStore());
 
@@ -88,6 +90,19 @@ class LocalStore {
       if (await f.exists()) await f.delete();
     }
     await _tracks!.clear();
+
+    for (final key in _playlists!.keys.toList()) {
+      final detail = getPlaylist(key as String);
+      if (detail == null) continue;
+      final tracks = detail.tracks
+          .map((t) => t.copyWith(status: TrackStatus.queued))
+          .toList();
+      await savePlaylist(detail.copyWith(
+        tracks: tracks,
+        readyCount: 0,
+        syncing: tracks.isNotEmpty,
+      ));
+    }
   }
 
   Future<int> trackStorageBytes() async {
@@ -111,17 +126,27 @@ class LocalStore {
   PlaylistSummary _summaryFromMap(Map<String, dynamic> map) {
     final tracks = (map['tracks'] as List?) ?? [];
     var ready = 0;
+    var inFlight = 0;
     for (final t in tracks) {
-      if (hasTrack((t as Map)['id'] as String)) ready++;
+      final m = t as Map;
+      final id = m['id'] as String;
+      if (hasTrack(id)) {
+        ready++;
+        continue;
+      }
+      final status = m['status'] as String? ?? 'queued';
+      if (status == 'failed') {
+        continue;
+      }
+      inFlight++;
     }
-    final syncing = ready < tracks.length;
     return PlaylistSummary(
       id: map['id'] as String,
       name: map['name'] as String,
       coverUrl: map['cover_url'] as String?,
       trackCount: tracks.length,
       readyCount: ready,
-      syncing: syncing,
+      syncing: inFlight > 0,
       spotifyUrl: map['spotify_url'] as String? ?? '',
     );
   }
@@ -134,11 +159,14 @@ class LocalStore {
       return t;
     }).toList();
 
-    final ready = tracks.where((t) => t.status == TrackStatus.ready).length;
-    final syncing = tracks.any((t) =>
-        t.status == TrackStatus.queued ||
-        t.status == TrackStatus.downloading ||
-        t.status == TrackStatus.resolving);
+    final ready = tracks.where((t) => t.status == TrackStatus.ready || hasTrack(t.id)).length;
+    final syncing = tracks.any((t) {
+      if (hasTrack(t.id)) return false;
+      return t.status == TrackStatus.queued ||
+          t.status == TrackStatus.downloading ||
+          t.status == TrackStatus.resolving ||
+          t.status == TrackStatus.ready;
+    });
 
     return PlaylistDetail(
       id: detail.id,
@@ -152,6 +180,44 @@ class LocalStore {
   }
 
   List<PlaylistSummary> summariesFromDetails() => getAllPlaylists();
+
+  List<TrackWithPlaylist> getAllTrackEntries({bool uniqueByTrackId = false}) {
+    final entries = <TrackWithPlaylist>[];
+    final seen = <String>{};
+    for (final summary in getAllPlaylists()) {
+      final detail = getPlaylist(summary.id);
+      if (detail == null) continue;
+      for (final track in detail.tracks) {
+        if (uniqueByTrackId && !seen.add(track.id)) continue;
+        entries.add(TrackWithPlaylist(
+          track: hasTrack(track.id) ? track.copyWith(status: TrackStatus.ready) : track,
+          playlistId: detail.id,
+          playlistName: detail.name,
+        ));
+      }
+    }
+    return entries;
+  }
+
+  List<Track> getLikedTracks(Set<String> favoriteIds) {
+    final byId = <String, Track>{};
+    for (final entry in getAllTrackEntries()) {
+      if (!favoriteIds.contains(entry.track.id)) continue;
+      byId.putIfAbsent(
+        entry.track.id,
+        () => hasTrack(entry.track.id)
+            ? entry.track.copyWith(status: TrackStatus.ready)
+            : entry.track,
+      );
+    }
+    return byId.values.toList();
+  }
+
+  int localSavedCount(List<Track> tracks) =>
+      tracks.where((t) => hasTrack(t.id)).length;
+
+  int failedCount(List<Track> tracks) =>
+      tracks.where((t) => !hasTrack(t.id) && t.status == TrackStatus.failed).length;
 }
 
 final trackSyncProvider = Provider((ref) => TrackSyncService(ref));
@@ -160,6 +226,7 @@ class TrackSyncService {
   TrackSyncService(this.ref);
 
   final Ref ref;
+  final _activeDownloads = <String, Future<String?>>{};
 
   Future<void> queueTracks(List<Track> tracks) async {
     final store = ref.read(localStoreProvider);
@@ -180,6 +247,8 @@ class TrackSyncService {
   }
 
   Future<PlaylistDetail> refreshPlaylist(PlaylistDetail detail) async {
+    if (!ref.read(serverReachableProvider)) return detail;
+
     final store = ref.read(localStoreProvider);
     final needQueue = detail.tracks.where((t) {
       if (store.hasTrack(t.id)) return false;
@@ -197,7 +266,11 @@ class TrackSyncService {
         .take(3)
         .toList();
 
-    await Future.wait(toDownload.map(downloadTrack));
+    for (final track in toDownload) {
+      try {
+        await downloadTrack(track);
+      } catch (_) {}
+    }
 
     final updatedStatuses = await fetchStatuses(detail.tracks);
     merged = store.mergeStatuses(detail, updatedStatuses);
@@ -218,6 +291,10 @@ class TrackSyncService {
       return t;
     }).toList();
     final ready = tracks.where((t) => t.status == TrackStatus.ready).length;
+    final syncing = tracks.any((t) =>
+        t.status == TrackStatus.queued ||
+        t.status == TrackStatus.downloading ||
+        t.status == TrackStatus.resolving);
     return PlaylistDetail(
       id: detail.id,
       name: detail.name,
@@ -225,7 +302,7 @@ class TrackSyncService {
       spotifyUrl: detail.spotifyUrl,
       tracks: tracks,
       readyCount: ready,
-      syncing: ready < tracks.length,
+      syncing: syncing,
     );
   }
 
@@ -234,16 +311,43 @@ class TrackSyncService {
     final existing = store.getTrackPath(track.id);
     if (existing != null) return existing;
 
+    final inFlight = _activeDownloads[track.id];
+    if (inFlight != null) return inFlight;
+
+    final future = _downloadTrackOnce(track);
+    _activeDownloads[track.id] = future;
+    try {
+      return await future;
+    } finally {
+      _activeDownloads.remove(track.id);
+    }
+  }
+
+  Future<String?> _downloadTrackOnce(Track track) async {
+    final store = ref.read(localStoreProvider);
+    final existing = store.getTrackPath(track.id);
+    if (existing != null) return existing;
+
     final api = ref.read(apiProvider);
     final dest = await store.trackFilePath(track.id);
     final tmp = '$dest.part';
 
-    await Dio(BaseOptions(
-      connectTimeout: const Duration(seconds: 30),
-      receiveTimeout: const Duration(minutes: 5),
-    )).download(api.streamUrl(track.id), tmp);
-    await File(tmp).rename(dest);
-    await store.saveTrackPath(track.id, dest);
-    return dest;
+    try {
+      await Dio(BaseOptions(
+        connectTimeout: const Duration(seconds: 30),
+        receiveTimeout: const Duration(minutes: 5),
+      )).download(api.streamUrl(track.id), tmp);
+      await File(tmp).rename(dest);
+      await store.saveTrackPath(track.id, dest);
+      return dest;
+    } on DioException catch (e) {
+      try {
+        await File(tmp).delete();
+      } catch (_) {}
+      if (e.response?.statusCode == 404) {
+        return null;
+      }
+      rethrow;
+    }
   }
 }

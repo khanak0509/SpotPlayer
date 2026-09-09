@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/models.dart';
 import '../providers/player_provider.dart';
+import '../services/user_prefs_store.dart';
 import '../theme/app_theme.dart';
 import '../widgets/art_background.dart';
 import '../widgets/scale_button.dart';
@@ -53,6 +54,39 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen>
       PlayerRepeatMode.all => Icons.repeat_rounded,
       PlayerRepeatMode.off => Icons.repeat_rounded,
     };
+  }
+
+  void _showSleepTimer() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.surfaceElevated,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: Text('Sleep timer', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+            ),
+            for (final mins in [15, 30, 60])
+              ListTile(
+                title: Text('$mins minutes'),
+                onTap: () {
+                  ref.read(playerProvider.notifier).setSleepTimer(Duration(minutes: mins));
+                  Navigator.pop(ctx);
+                },
+              ),
+            ListTile(
+              title: const Text('Off', style: TextStyle(color: AppColors.error)),
+              onTap: () {
+                ref.read(playerProvider.notifier).setSleepTimer(Duration.zero);
+                Navigator.pop(ctx);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _showQueue() {
@@ -216,6 +250,14 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen>
                       ],
                     ),
                   ),
+                  if (player.sleepRemaining != null)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 32),
+                      child: Text(
+                        'Sleep in ${_formatDuration(player.sleepRemaining!)}',
+                        style: const TextStyle(color: AppColors.accent, fontSize: 12),
+                      ),
+                    ),
                   Expanded(
                     child: GestureDetector(
                       onHorizontalDragEnd: (d) {
@@ -275,6 +317,41 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen>
                             fontSize: 16,
                             fontWeight: FontWeight.w500,
                           ),
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            IconButton(
+                              iconSize: 28,
+                              splashRadius: 24,
+                              icon: Icon(
+                                ref.watch(userPrefsProvider.select((p) => p.isFavorite(track.id)))
+                                    ? Icons.favorite_rounded
+                                    : Icons.favorite_border_rounded,
+                                color: AppColors.accent,
+                              ),
+                              onPressed: () {
+                                HapticFeedback.lightImpact();
+                                ref.read(userPrefsProvider.notifier).toggleFavorite(track.id);
+                              },
+                            ),
+                            TextButton(
+                              onPressed: () =>
+                                  ref.read(playerProvider.notifier).cyclePlaybackSpeed(),
+                              child: Text(
+                                '${player.playbackSpeed}x',
+                                style: const TextStyle(
+                                  color: AppColors.textPrimary,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.bedtime_outlined, color: AppColors.textSecondary),
+                              onPressed: _showSleepTimer,
+                            ),
+                          ],
                         ),
                       ],
                     ),

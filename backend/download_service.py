@@ -278,8 +278,12 @@ async def enqueue_track(track_id: str, artist: str, title: str, duration_ms: int
 
     if status == "ready" and path and Path(path).exists():
         return
-    if status in ("downloading", "failed") or track_id in _pending:
+    if status == "downloading" or track_id in _pending:
         return
+    if status == "failed":
+        delete_temp_file(track_id)
+        await clear_path(track_id)
+        _pending.discard(track_id)
 
     _pending.add(track_id)
     await set_status(track_id, "queued")

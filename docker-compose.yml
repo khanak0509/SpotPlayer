@@ -1,8 +1,11 @@
 services:
   backend:
-    build: ./backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
     ports:
       - "8000:8000"
     environment:
-      - DOWNLOAD_WORKERS=4
-    restart: unless-stopped
+      DOWNLOAD_WORKERS: "3"
+      PORT: "8000"
+      HOST_IP: ${HOST_IP:-}

@@ -9,9 +9,13 @@ import '../models/models.dart';
 import '../providers/library_provider.dart';
 import '../providers/player_provider.dart';
 import '../services/api.dart';
+import '../services/local_store.dart';
+import '../services/server_connectivity.dart';
+import '../services/user_prefs_store.dart';
 import '../theme/app_theme.dart';
 import '../widgets/art_background.dart';
 import '../widgets/mini_player.dart';
+import '../widgets/offline_banner.dart';
 import '../widgets/playlist_sync_progress.dart';
 import '../widgets/scale_button.dart';
 import '../widgets/track_row.dart';
@@ -37,6 +41,7 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
     super.initState();
     _searchController.addListener(() => setState(() {}));
     _pollTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (!ref.read(serverReachableProvider)) return;
       ref.invalidate(playlistDetailProvider(widget.playlistId));
       ref.read(libraryProvider.notifier).load();
     });
@@ -101,31 +106,43 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
 
   PlaylistDetail _detailWithOrderedTracks(PlaylistDetail detail) {
     if (_orderedTracks == null) return detail;
-    final ready = _orderedTracks!.where((t) => t.status == TrackStatus.ready).length;
+    final store = ref.read(localStoreProvider);
+    final ready = _orderedTracks!.where((t) => store.hasTrack(t.id)).length;
+    final syncing = _orderedTracks!.any((t) {
+      if (store.hasTrack(t.id)) return false;
+      return t.status != TrackStatus.failed;
+    });
     return detail.copyWith(
       tracks: _orderedTracks,
       readyCount: ready,
-      syncing: ready < _orderedTracks!.length,
+      syncing: syncing,
     );
   }
 
-  void _playTrack(PlaylistDetail detail, Track track) {
+  Future<void> _playTrack(PlaylistDetail detail, Track track) async {
     final fullIndex = detail.tracks.indexWhere((t) => t.id == track.id);
-    ref.read(playerProvider.notifier).playTracks(
+    await ref.read(playerProvider.notifier).playTracks(
           tracks: detail.tracks,
           startIndex: fullIndex >= 0 ? fullIndex : 0,
           playlistId: detail.id,
           playlistName: detail.name,
           playlistCover: detail.coverUrl,
         );
+    if (!mounted) return;
+    final err = ref.read(playerProvider).playError;
+    if (err != null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err)));
+      ref.read(playerProvider.notifier).clearPlayError();
+    }
   }
 
-  Widget _trackTile(PlaylistDetail detail, Track track, int displayIndex) {
+  Widget _trackTile(PlaylistDetail detail, Track track, int displayIndex, {bool showFavorite = true}) {
     final fullIndex = detail.tracks.indexWhere((t) => t.id == track.id);
 
     return SwipeableTrackRow(
       track: track,
       index: fullIndex >= 0 ? fullIndex : displayIndex,
+      showFavorite: showFavorite,
       onTap: () => _playTrack(detail, track),
       onRetry: () async {
         await ref.read(apiProvider).retryTrack(track.id, detail.tracks);
@@ -137,18 +154,32 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final cached = ref.watch(localStoreProvider).getPlaylist(widget.playlistId);
+    final reachable = ref.watch(serverReachableProvider);
+
+    if (cached == null) {
+      return const Scaffold(
+        backgroundColor: AppColors.background,
+        body: Center(child: Text('Playlist not found', style: TextStyle(color: AppColors.textMuted))),
+      );
+    }
+
+    if (!reachable) {
+      _syncTracks(cached);
+      return _buildContent(context, _detailWithOrderedTracks(cached), offline: true);
+    }
+
     final asyncDetail = ref.watch(playlistDetailProvider(widget.playlistId));
 
     return asyncDetail.when(
-      loading: () => const Scaffold(
-        backgroundColor: AppColors.background,
-        body: Center(child: CircularProgressIndicator(color: AppColors.accent)),
-      ),
-      error: (e, _) => Scaffold(
-        backgroundColor: AppColors.background,
-        appBar: AppBar(),
-        body: Center(child: Text('$e', style: const TextStyle(color: AppColors.error))),
-      ),
+      loading: () {
+        _syncTracks(cached);
+        return _buildContent(context, _detailWithOrderedTracks(cached));
+      },
+      error: (e, _) {
+        _syncTracks(cached);
+        return _buildContent(context, _detailWithOrderedTracks(cached), offline: true);
+      },
       data: (detail) {
         _syncTracks(detail);
         return _buildContent(context, _detailWithOrderedTracks(detail));
@@ -156,8 +187,11 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
     );
   }
 
-  Widget _buildContent(BuildContext context, PlaylistDetail detail) {
-    final readyTracks = detail.tracks.where((t) => t.status == TrackStatus.ready).toList();
+  Widget _buildContent(BuildContext context, PlaylistDetail detail, {bool offline = false}) {
+    final store = ref.read(localStoreProvider);
+    final readyTracks = detail.tracks
+        .where((t) => store.hasTrack(t.id) || t.status == TrackStatus.ready)
+        .toList();
     final player = ref.watch(playerProvider);
     final isThisPlaylist = player.playlistId == detail.id;
     final showPause = isThisPlaylist && player.hasTrack && player.isPlaying;
@@ -260,7 +294,8 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
                         ),
                       ),
                       const SizedBox(height: 10),
-                      PlaylistSyncProgress(tracks: detail.tracks),
+                      if (offline) const OfflineBanner(),
+                      PlaylistSyncProgress(tracks: detail.tracks, playlistId: detail.id),
                       const SizedBox(height: 16),
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -377,7 +412,21 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
           else if (searching)
             SliverList(
               delegate: SliverChildBuilderDelegate(
-                (context, i) => _trackTile(detail, filtered[i], i),
+                (context, i) {
+                  final track = filtered[i];
+                  final isFavorite =
+                      ref.watch(userPrefsProvider.select((p) => p.isFavorite(track.id)));
+                  return SizedBox(
+                    height: 64,
+                    child: Row(
+                      children: [
+                        Expanded(child: _trackTile(detail, track, i, showFavorite: false)),
+                        FavoriteHeartButton(trackId: track.id, isFavorite: isFavorite),
+                        const SizedBox(width: 4),
+                      ],
+                    ),
+                  );
+                },
                 childCount: filtered.length,
               ),
             )
@@ -402,10 +451,33 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
               },
               itemBuilder: (context, i) {
                 final track = detail.tracks[i];
-                return ReorderableDelayedDragStartListener(
+                final isFavorite = ref.watch(userPrefsProvider.select((p) => p.isFavorite(track.id)));
+                // Heart stays outside the reorder drag listener so likes never miss / hit the row above.
+                return SizedBox(
                   key: ValueKey(track.id),
-                  index: i,
-                  child: _trackTile(detail, track, i),
+                  height: 64,
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: ReorderableDelayedDragStartListener(
+                          index: i,
+                          child: SwipeableTrackRow(
+                            track: track,
+                            index: i,
+                            showFavorite: false,
+                            onTap: () => _playTrack(detail, track),
+                            onRetry: () async {
+                              await ref.read(apiProvider).retryTrack(track.id, detail.tracks);
+                              ref.invalidate(playlistDetailProvider(widget.playlistId));
+                            },
+                            onRemove: () => _removeTrack(detail, track),
+                          ),
+                        ),
+                      ),
+                      FavoriteHeartButton(trackId: track.id, isFavorite: isFavorite),
+                      const SizedBox(width: 4),
+                    ],
+                  ),
                 );
               },
             ),

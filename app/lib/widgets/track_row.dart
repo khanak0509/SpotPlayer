@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/models.dart';
 import '../providers/player_provider.dart';
+import '../services/local_store.dart';
+import '../services/user_prefs_store.dart';
 import '../theme/app_theme.dart';
 import 'equalizer_bars.dart';
 
@@ -14,6 +16,7 @@ class SwipeableTrackRow extends StatelessWidget {
   final VoidCallback? onTap;
   final VoidCallback? onRetry;
   final VoidCallback? onRemove;
+  final bool showFavorite;
 
   const SwipeableTrackRow({
     super.key,
@@ -22,6 +25,7 @@ class SwipeableTrackRow extends StatelessWidget {
     this.onTap,
     this.onRetry,
     this.onRemove,
+    this.showFavorite = false,
   });
 
   @override
@@ -61,6 +65,7 @@ class SwipeableTrackRow extends StatelessWidget {
       child: TrackRow(
         track: track,
         index: index,
+        showFavorite: showFavorite,
         onTap: onTap,
         onRetry: onRetry,
       ),
@@ -100,6 +105,7 @@ class TrackRow extends ConsumerWidget {
   final int index;
   final VoidCallback? onTap;
   final VoidCallback? onRetry;
+  final bool showFavorite;
 
   const TrackRow({
     super.key,
@@ -107,6 +113,7 @@ class TrackRow extends ConsumerWidget {
     required this.index,
     this.onTap,
     this.onRetry,
+    this.showFavorite = false,
   });
 
   @override
@@ -114,80 +121,114 @@ class TrackRow extends ConsumerWidget {
     final current = ref.watch(playerProvider.select((s) => s.currentTrack));
     final isPlaying = ref.watch(playerProvider.select((s) => s.isPlaying));
     final isCurrent = current?.id == track.id;
+    final isFavorite = ref.watch(userPrefsProvider.select((p) => p.isFavorite(track.id)));
+    final hasLocal = ref.watch(localStoreProvider).hasTrack(track.id);
+    final canPlay = hasLocal || track.status == TrackStatus.ready;
 
     return Material(
       color: isCurrent ? AppColors.surfaceHighlight.withValues(alpha: 0.6) : Colors.transparent,
-      child: InkWell(
-        onTap: track.status == TrackStatus.ready ? onTap : null,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-          child: Row(
-            children: [
-              SizedBox(
-                width: 24,
-                child: isCurrent && isPlaying
-                    ? const EqualizerBars()
-                    : Text(
-                        '${index + 1}',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: isCurrent ? AppColors.accent : AppColors.textSecondary,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
+      clipBehavior: Clip.hardEdge,
+      child: SizedBox(
+        height: 64,
+        child: Row(
+          children: [
+            Expanded(
+              child: InkWell(
+                onTap: () {
+                  if (canPlay) {
+                    onTap?.call();
+                    return;
+                  }
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        track.status == TrackStatus.failed
+                            ? 'Download failed — swipe to retry'
+                            : 'Not downloaded yet',
+                      ),
+                    ),
+                  );
+                },
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 0, 8, 0),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 24,
+                        child: isCurrent && isPlaying
+                            ? const EqualizerBars()
+                            : Text(
+                                '${index + 1}',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: isCurrent ? AppColors.accent : AppColors.textSecondary,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                      ),
+                      const SizedBox(width: 10),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: track.albumArt != null
+                            ? CachedNetworkImage(
+                                imageUrl: track.albumArt!,
+                                width: 44,
+                                height: 44,
+                                fit: BoxFit.cover,
+                                errorWidget: (context, url, error) => _artPlaceholder(),
+                              )
+                            : _artPlaceholder(),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              track.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 15,
+                                color: isCurrent ? AppColors.accent : AppColors.textPrimary,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              track.artist,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: AppColors.textSecondary,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-              ),
-              const SizedBox(width: 10),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(6),
-                child: track.albumArt != null
-                    ? CachedNetworkImage(
-                        imageUrl: track.albumArt!,
-                        width: 44,
-                        height: 44,
-                        fit: BoxFit.cover,
-                        errorWidget: (_, __, ___) => _artPlaceholder(),
-                      )
-                    : _artPlaceholder(),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      track.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 15,
-                        color: isCurrent ? AppColors.accent : AppColors.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      track.artist,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: AppColors.textSecondary,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
-              const SizedBox(width: 6),
-              if (track.status != TrackStatus.ready) ...[
-                _StatusIndicator(
-                  status: track.status,
-                  onRetry: onRetry,
-                ),
-                const SizedBox(width: 6),
-              ],
-              Text(
+            ),
+            if (showFavorite) FavoriteHeartButton(trackId: track.id, isFavorite: isFavorite),
+            if (!hasLocal && track.status != TrackStatus.ready) ...[
+              Padding(
+                padding: const EdgeInsets.only(right: 4),
+                child: _StatusIndicator(status: track.status, onRetry: onRetry),
+              ),
+            ] else if (hasLocal && track.status != TrackStatus.ready)
+              const Padding(
+                padding: EdgeInsets.only(right: 8),
+                child: Icon(Icons.check_circle_rounded, size: 16, color: AppColors.success),
+              ),
+            Padding(
+              padding: const EdgeInsets.only(left: 2, right: 12),
+              child: Text(
                 track.durationFormatted,
                 style: TextStyle(
                   color: isCurrent
@@ -197,8 +238,8 @@ class TrackRow extends ConsumerWidget {
                   fontWeight: FontWeight.w600,
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -210,6 +251,41 @@ class TrackRow extends ConsumerWidget {
       height: 44,
       color: AppColors.surfaceHighlight,
       child: const Icon(Icons.music_note, size: 20, color: AppColors.textMuted),
+    );
+  }
+}
+
+/// Isolated heart so taps never hit the row above/below or start a reorder drag.
+class FavoriteHeartButton extends ConsumerWidget {
+  final String trackId;
+  final bool isFavorite;
+
+  const FavoriteHeartButton({
+    super.key,
+    required this.trackId,
+    required this.isFavorite,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return SizedBox(
+      width: 40,
+      height: 64,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () {
+            HapticFeedback.lightImpact();
+            ref.read(userPrefsProvider.notifier).toggleFavorite(trackId);
+          },
+          customBorder: const CircleBorder(),
+          child: Icon(
+            isFavorite ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+            size: 22,
+            color: isFavorite ? AppColors.accent : AppColors.textMuted,
+          ),
+        ),
+      ),
     );
   }
 }
@@ -233,11 +309,15 @@ class _StatusIndicator extends StatelessWidget {
         );
       case TrackStatus.failed:
         return GestureDetector(
+          behavior: HitTestBehavior.opaque,
           onTap: () {
             HapticFeedback.mediumImpact();
             onRetry?.call();
           },
-          child: const Icon(Icons.refresh_rounded, size: 18, color: AppColors.error),
+          child: const Padding(
+            padding: EdgeInsets.all(6),
+            child: Icon(Icons.refresh_rounded, size: 18, color: AppColors.error),
+          ),
         );
       default:
         return const SizedBox(

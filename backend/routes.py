@@ -208,13 +208,9 @@ async def stream_track(track_id: str, request: Request):
         )
 
     def iter_full():
-        try:
-            with open(path, "rb") as f:
-                while chunk := f.read(65536):
-                    yield chunk
-        finally:
-            delete_temp_file(track_id)
-            clear_path_sync(track_id)
+        with open(path, "rb") as f:
+            while chunk := f.read(65536):
+                yield chunk
 
     return StreamingResponse(
         iter_full(),

@@ -1,68 +1,79 @@
 # SpotPlayer
 
-Personal Spotify-link music player. Paste a playlist, backend resolves tracks via scraping and downloads audio via yt-dlp. The Flutter app saves tracks locally — replays never hit the server again.
+**Paste a Spotify playlist. Keep it on your phone. Play offline.**
 
-## Stack
+SpotPlayer turns any Spotify playlist into your own offline library. Import once, and every track lives on your phone — no streaming, no re-downloading when you hit play.
 
-- **Backend**: FastAPI, spotifyscraper, yt-dlp, ffmpeg (in-memory state, ephemeral temp files)
-- **App**: Flutter (Riverpod, just_audio, Hive)
-- **Deploy**: Render.com free Docker web service
+---
 
-## Quick start (local)
+## What you get
 
-### Backend
+- Import from a Spotify link
+- Songs saved as MP3 on your phone
+- Full player — shuffle, queue, background play
+- Works offline after import
 
-```bash
-cd backend
-pip install -r requirements.txt
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-```
+Your computer is only needed **while adding a new playlist**. After that, the app runs on its own.
 
-Requires **ffmpeg** on PATH for audio conversion.
+---
 
-### Flutter app
+## Setup
+
+### 1 · Install the app on your phone
+
+Build a small release APK (share the `arm64-v8a` file — works on most phones):
 
 ```bash
 cd app
 flutter pub get
-flutter run
+flutter build apk --release --split-per-abi --tree-shake-icons
 ```
 
-Set the backend URL in **Settings** (defaults to `http://localhost:8000`).
+APK path:
 
-## Deploy to Render
+```
+app/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+```
 
-1. Push this repo to GitHub
-2. In Render: **New → Blueprint** and connect the repo (uses `render.yaml`)
-   - Or **New → Web Service**, point at `./backend/Dockerfile`
-3. Copy the service URL into the app's Settings (e.g. `https://spotplayer-api.onrender.com`)
+Upload that file and share your download link.
 
-No persistent disk needed. The free tier sleeps after 15 min of inactivity — first request after idle may take 30–60 seconds (the app handles this during import).
+### 2 · Import a playlist
 
-## Architecture
+**On your computer** (same Wi-Fi as your phone). From the **project root** (not the `app` folder):
 
-| Layer | Responsibility |
-|-------|----------------|
-| Backend (session) | Resolve playlists, queue yt-dlp downloads, stream each track once |
-| Hive (device) | Playlist library, track file paths — permanent local storage |
-| Temp disk (server) | Holds audio briefly during download/stream, cleared after send |
+```bash
+cd /path/to/spotify
+./start.sh        # Mac / Linux
+```
 
-## API
+```bat
+start.bat         # Windows
+```
 
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/api/playlists/import` | `{ "url": "..." }` → full playlist + queue downloads |
-| POST | `/api/playlists/sync` | `{ "url": "..." }` → re-sync for new tracks |
-| POST | `/api/tracks/queue` | Queue tracks for download |
-| POST | `/api/tracks/status` | Batch status for track IDs |
-| GET | `/api/tracks/{id}/stream` | Stream audio (full download, then temp file removed) |
-| POST | `/api/tracks/{id}/retry` | Retry failed download |
-| GET | `/health` | Health check |
+That starts the backend and prints a link — copy it:
 
-## Env vars
+```
+http://192.168.1.42:8000/api
+```
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `DOWNLOAD_WORKERS` | `4` | Concurrent yt-dlp workers |
-| `PORT` | `8000` | Server port (Render sets this) |
-| `TEMP_DIR` | system temp | Ephemeral audio scratch space |
+**On your phone:**
+
+1. **Settings → Server** → paste that link
+2. Tap **+** → paste a Spotify playlist link
+3. Wait for downloads → **Play**
+
+Press `Ctrl+C` to stop the backend when done. Music stays on your phone.
+
+### 3 · Daily use
+
+Open the app and play. No computer, no Wi-Fi required.
+
+---
+
+## Requirements
+
+- [Docker](https://docs.docker.com/get-docker/)
+- [Python 3](https://www.python.org/downloads/) — used by the start script to find your Wi-Fi IP
+- Phone and computer on the **same Wi-Fi** during import
+
+---

@@ -1,15 +1,27 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+import 'package:just_audio_background/just_audio_background.dart';
 
 import 'providers/library_provider.dart';
 import 'screens/shell.dart';
-import 'services/api.dart';
 import 'services/local_store.dart';
+import 'services/server_connectivity.dart';
+import 'services/settings_store.dart' show bootstrapServerUrl, settingsStoreProvider, serverUrlProvider;
+import 'services/user_prefs_store.dart';
+import 'services/widget_service.dart';
 import 'theme/app_theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await JustAudioBackground.init(
+    androidNotificationChannelId: 'com.spotplayer.spotplayer.audio',
+    androidNotificationChannelName: 'SpotPlayer',
+    androidNotificationOngoing: true,
+    androidStopForegroundOnPause: false,
+    androidShowNotificationBadge: true,
+  );
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,
     statusBarIconBrightness: Brightness.light,
@@ -20,6 +32,11 @@ void main() async {
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]);
+
+  await Hive.initFlutter();
+  final settingsBox = await Hive.openBox<String>('settings');
+  bootstrapServerUrl = settingsBox.get('server_url')?.trim() ?? '';
+
   runApp(const ProviderScope(child: SpotPlayerApp()));
 }
 
@@ -30,15 +47,46 @@ class SpotPlayerApp extends ConsumerStatefulWidget {
   ConsumerState<SpotPlayerApp> createState() => _SpotPlayerAppState();
 }
 
-class _SpotPlayerAppState extends ConsumerState<SpotPlayerApp> {
+class _SpotPlayerAppState extends ConsumerState<SpotPlayerApp> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
-    Future.microtask(() async {
-      await ref.read(localStoreProvider).init();
-      await ref.read(apiProvider).init();
-      ref.read(libraryProvider.notifier).load();
-    });
+    WidgetsBinding.instance.addObserver(this);
+    Future.microtask(_bootstrap);
+  }
+
+  Future<void> _bootstrap() async {
+    await ref.read(localStoreProvider).init();
+    await ref.read(userPrefsProvider.notifier).init();
+    await ref.read(settingsStoreProvider).init();
+    ref.read(serverUrlProvider.notifier).state =
+        ref.read(settingsStoreProvider).serverUrl.isNotEmpty
+            ? ref.read(settingsStoreProvider).serverUrl
+            : bootstrapServerUrl;
+    await ref.read(widgetServiceProvider).init();
+    await ref.read(serverReachableProvider.notifier).refresh();
+    await ref.read(libraryProvider.notifier).load();
+    if (ref.read(serverReachableProvider)) {
+      ref.read(libraryProvider.notifier).autoSyncAllIfEnabled();
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      ref.read(serverReachableProvider.notifier).refresh().then((up) {
+        if (up) {
+          ref.read(libraryProvider.notifier).autoSyncAllIfEnabled();
+          ref.read(libraryProvider.notifier).load();
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
   }
 
   @override
