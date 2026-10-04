@@ -9,6 +9,8 @@
     <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python"></a>
     <img src="https://img.shields.io/badge/Offline-100%25-brightgreen?style=for-the-badge" alt="Offline">
   </p>
+  
+  <h3><a href="SpotPlayer.apk">📲 Download APK (24MB)</a></h3>
 </div>
 
 ---
