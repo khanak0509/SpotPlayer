@@ -15,7 +15,7 @@
 ---
 
 ## ✨ Why SpotPlayer?
-Stop paying for subscriptions just to listen to your music offline. **SpotPlayer** is a sleek, completely offline music player built for power users and developers. 
+Stop paying for subscriptions just to listen to your music offline. **SpotPlayer** is a sleek, completely offline music player built for power users. 
 
 Paste a Spotify link. The app talks to a self-hosted local backend, fetches the absolute best quality audio, syncs it to your phone, and boom—your music lives on your device forever. No ads, no streaming buffers, no monthly fees. 
 
