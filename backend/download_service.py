@@ -7,13 +7,14 @@ from pathlib import Path
 import yt_dlp
 
 from config import DOWNLOAD_WORKERS, TEMP_DIR
-from track_store import clear_path, get_path, get_status, set_meta, set_path, set_status
+from track_store import clear_path, get_path, get_status, set_meta, set_path, set_status, get_all_statuses, get_meta
 
 logger = logging.getLogger(__name__)
 
 download_queue: asyncio.Queue | None = None
 _workers_started = False
 _pending: set[str] = set()
+_retry_counts: dict[str, int] = {}
 
 
 def _audio_path(track_id: str) -> Path:
@@ -34,6 +35,17 @@ _NON_ORIGINAL = (
 )
 
 _VARIANT = ("unplugged", "live", "remix", "redux", "acoustic", "reprise", "version", "lofi", "lo-fi")
+
+_DUBBED_LANG_MARKERS = (
+    "tamil", "telugu", "malayalam", "kannada", "bengali", "marathi", "punjabi",
+    "tamil version", "telugu version", "kannada version", "malayalam version",
+    "dubbed", "dubbed version",
+    "en uyir",
+    "em nathoni",
+    "en jeevane",
+    "enthi nenena",
+    "nee kannu",
+)
 
 _OFFICIAL_LABELS = (
     "t-series", "sony music", "zee music", "tips", "saregama", "yrf", "wave music",
@@ -75,6 +87,7 @@ def _official_bonus(video_title: str, channel: str, artist: str) -> float:
 def _non_original_penalty(video_title: str, channel: str, spotify_title: str) -> float:
     vt = _norm(video_title)
     ch = _norm(channel)
+    st = _norm(spotify_title)
     allowed = _spotify_allows_variant(spotify_title)
     penalty = 0.0
 
@@ -88,6 +101,11 @@ def _non_original_penalty(video_title: str, channel: str, spotify_title: str) ->
 
     if "lyrics" in vt and "official" not in vt:
         penalty += 0.25
+
+    for lang in _DUBBED_LANG_MARKERS:
+        if lang in vt and lang not in st:
+            penalty += 0.6
+            break
 
     return min(penalty, 1.0)
 
@@ -326,15 +344,29 @@ async def _worker(worker_id: int):
             if path:
                 await set_status(track_id, "ready")
                 await set_path(track_id, path)
+                _retry_counts.pop(track_id, None)
                 logger.info("ready %s", track_id)
             else:
-                await set_status(track_id, "failed")
-                logger.warning("failed %s", track_id)
+                retries_done = _retry_counts.get(track_id, 0)
+                if retries_done < 1:
+                    _retry_counts[track_id] = retries_done + 1
+                    delete_temp_file(track_id)
+                    await clear_path(track_id)
+                    await set_status(track_id, "queued")
+                    _pending.add(track_id)
+                    await download_queue.put(job)
+                    logger.warning("auto-retry %s (attempt %d)", track_id, retries_done + 1)
+                else:
+                    _retry_counts.pop(track_id, None)
+                    await set_status(track_id, "failed")
+                    _pending.discard(track_id)
+                    logger.warning("failed %s (no more retries)", track_id)
         except Exception as e:
             logger.exception("worker %d failed on %s: %s", worker_id, track_id, e)
             await set_status(track_id, "failed")
-        finally:
+            _retry_counts.pop(track_id, None)
             _pending.discard(track_id)
+        finally:
             download_queue.task_done()
 
 
@@ -344,11 +376,28 @@ async def start_workers():
         return
     download_queue = asyncio.Queue()
     _workers_started = True
+
+    statuses = await get_all_statuses()
+    for track_id, status in statuses.items():
+        if status in ("downloading", "queued"):
+            meta = await get_meta(track_id)
+            if meta:
+                _pending.add(track_id)
+                await set_status(track_id, "queued")
+                await download_queue.put({
+                    "track_id": track_id,
+                    "artist": meta.get("artist", ""),
+                    "title": meta.get("title", ""),
+                    "duration_ms": meta.get("duration_ms", 0),
+                })
+                logger.info("recovered stuck track: %s", track_id)
+
     for i in range(DOWNLOAD_WORKERS):
         asyncio.create_task(_worker(i))
 
 
 async def retry_track(track_id: str, artist: str, title: str, duration_ms: int):
+    _retry_counts.pop(track_id, None)
     delete_temp_file(track_id)
     await clear_path(track_id)
     _pending.discard(track_id)

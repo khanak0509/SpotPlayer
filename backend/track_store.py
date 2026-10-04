@@ -37,11 +37,13 @@ def _load_sync():
 
 def _save_sync():
     path = _state_path()
-    path.write_text(json.dumps({
+    tmp_path = path.with_suffix('.tmp')
+    tmp_path.write_text(json.dumps({
         "status": _status,
         "paths": _paths,
         "meta": _meta,
     }, indent=2))
+    tmp_path.replace(path)
 
 
 async def init_store():
@@ -114,3 +116,9 @@ async def batch_status(track_ids: list[str]) -> dict[str, TrackStatus]:
             if s:
                 result[tid] = s
         return result
+
+
+async def get_all_statuses() -> dict[str, TrackStatus]:
+    async with _lock:
+        _load_sync()
+        return dict(_status)
