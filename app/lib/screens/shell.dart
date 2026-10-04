@@ -10,6 +10,50 @@ import 'import_empty_screen.dart';
 import 'library_screen.dart';
 import 'server_setup_screen.dart';
 import 'settings_screen.dart';
+import '../services/update_service.dart';
+
+class UpdateBanner extends ConsumerWidget {
+  const UpdateBanner({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (ref.watch(updateDismissedProvider)) return const SizedBox.shrink();
+    
+    final messageAsync = ref.watch(updateMessageProvider);
+    return messageAsync.when(
+      data: (message) {
+        if (message == null || message.isEmpty) return const SizedBox.shrink();
+        return Material(
+          color: AppColors.accent,
+          child: SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
+                children: [
+                  const Icon(Icons.info_outline, color: Colors.black),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      message,
+                      style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Colors.black),
+                    onPressed: () => ref.read(updateDismissedProvider.notifier).state = true,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
+    );
+  }
+}
 
 class AppShell extends ConsumerWidget {
   const AppShell({super.key});
@@ -43,28 +87,32 @@ class AppShell extends ConsumerWidget {
     final library = ref.watch(libraryProvider);
     final hasServer = hasServerConfigured(ref);
 
+    Widget content;
     if (library.loading && library.playlists.isEmpty) {
-      return const Scaffold(
+      content = const Scaffold(
         backgroundColor: AppColors.background,
         body: Center(child: CircularProgressIndicator(color: AppColors.accent)),
       );
-    }
-
-    if (library.playlists.isNotEmpty) {
-      return Scaffold(
+    } else if (library.playlists.isNotEmpty) {
+      content = Scaffold(
         backgroundColor: AppColors.background,
         body: const LibraryScreen(),
         bottomNavigationBar: MiniPlayerBar(onExpand: () => openNowPlaying(context)),
       );
+    } else if (!hasServer) {
+      content = const ServerSetupScreen();
+    } else {
+      content = ImportEmptyScreen(
+        onImport: () => _import(context, ref),
+        onOpenSettings: () => _openSettings(context),
+      );
     }
 
-    if (!hasServer) {
-      return const ServerSetupScreen();
-    }
-
-    return ImportEmptyScreen(
-      onImport: () => _import(context, ref),
-      onOpenSettings: () => _openSettings(context),
+    return Column(
+      children: [
+        const UpdateBanner(),
+        Expanded(child: content),
+      ],
     );
   }
 }

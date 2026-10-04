@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: spotplayer-update-api
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: LATEST_VERSION
+        value: 1.0.0
+      - key: DOWNLOAD_URL
+        value: https://github.com/khanak0509/SpotPlayer/blob/main/SpotPlayer.apk
+      - key: RELEASE_NOTES
+        value: Initial release
+      - key: IS_CRITICAL
+        value: false
