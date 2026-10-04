@@ -13,6 +13,7 @@ import '../widgets/playlist_card.dart';
 import '../widgets/offline_banner.dart';
 import '../widgets/scale_button.dart';
 import 'favorites_screen.dart';
+import 'listening_stats_screen.dart';
 import 'onboarding_screen.dart';
 import 'playlist_detail_screen.dart';
 import 'search_screen.dart';
@@ -57,6 +58,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   @override
   Widget build(BuildContext context) {
     final library = ref.watch(libraryProvider);
+    ref.watch(libraryTickProvider);
     final prefs = ref.watch(userPrefsProvider);
     final favoriteCount = prefs.favoriteIds.length;
     final reachable = ref.watch(serverReachableProvider);
@@ -75,6 +77,16 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                   Navigator.push(
                     context,
                     MaterialPageRoute(builder: (_) => const SearchScreen()),
+                  );
+                },
+              ),
+              IconButton(
+                icon: const Icon(Icons.insights_rounded, size: 24),
+                tooltip: 'Listening stats',
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const ListeningStatsScreen()),
                   );
                 },
               ),
@@ -120,6 +132,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                 ),
               ),
             ),
+          const SliverToBoxAdapter(child: SizedBox(height: 8)),
           if (prefs.recentTracks.isNotEmpty) ...[
             const SliverToBoxAdapter(
               child: Padding(

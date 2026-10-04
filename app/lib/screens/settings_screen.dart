@@ -186,6 +186,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             value: ref.watch(userPrefsProvider).crossfade,
             onChanged: (v) => ref.read(userPrefsProvider.notifier).setCrossfade(v),
           ),
+          SwitchListTile(
+            title: const Text('Reminders'),
+            subtitle: const Text('Download finished and continue listening tips'),
+            value: ref.watch(userPrefsProvider).remindersEnabled,
+            onChanged: (v) => ref.read(userPrefsProvider.notifier).setRemindersEnabled(v),
+          ),
           ListTile(
             title: const Text('Show onboarding tips'),
             trailing: const Icon(Icons.chevron_right_rounded),

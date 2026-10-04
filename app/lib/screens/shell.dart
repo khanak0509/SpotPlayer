@@ -50,7 +50,6 @@ class AppShell extends ConsumerWidget {
       );
     }
 
-    // Offline-first: if music is already on the phone, show library even without server URL.
     if (library.playlists.isNotEmpty) {
       return Scaffold(
         backgroundColor: AppColors.background,

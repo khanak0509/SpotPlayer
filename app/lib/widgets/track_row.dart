@@ -255,7 +255,6 @@ class TrackRow extends ConsumerWidget {
   }
 }
 
-/// Isolated heart so taps never hit the row above/below or start a reorder drag.
 class FavoriteHeartButton extends ConsumerWidget {
   final String trackId;
   final bool isFavorite;

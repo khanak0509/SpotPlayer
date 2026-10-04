@@ -42,7 +42,6 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
     _searchController.addListener(() {
       if (mounted) setState(() {});
     });
-    // Wait until the open animation finishes before network sync (avoids laggy slide).
     Future.delayed(const Duration(milliseconds: 320), () {
       if (!mounted) return;
       _refreshInBackground();
@@ -99,13 +98,12 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
   }
 
   Future<void> _onReorder(PlaylistDetail detail, int oldIndex, int newIndex) async {
-    setState(() {
-      final tracks = List<Track>.from(_orderedTracks ?? detail.tracks);
-      final moved = tracks.removeAt(oldIndex);
-      tracks.insert(newIndex, moved);
-      _orderedTracks = tracks;
-    });
+    final tracks = List<Track>.from(_orderedTracks ?? detail.tracks);
+    final moved = tracks.removeAt(oldIndex);
+    tracks.insert(newIndex, moved);
+    setState(() => _orderedTracks = tracks);
 
+    await ref.read(playerProvider.notifier).syncPlaylistOrder(detail.id, tracks);
     await ref.read(libraryProvider.notifier).reorderPlaylistTracks(
           detail.id,
           oldIndex,
@@ -462,7 +460,6 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
               itemBuilder: (context, i) {
                 final track = detail.tracks[i];
                 final isFavorite = ref.watch(userPrefsProvider.select((p) => p.isFavorite(track.id)));
-                // Heart stays outside the reorder drag listener so likes never miss / hit the row above.
                 return SizedBox(
                   key: ValueKey(track.id),
                   height: 64,

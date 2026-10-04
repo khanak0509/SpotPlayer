@@ -19,34 +19,17 @@ class NowPlayingScreen extends ConsumerStatefulWidget {
   ConsumerState<NowPlayingScreen> createState() => _NowPlayingScreenState();
 }
 
-class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _enterController;
+String _formatDuration(Duration d) {
+  final m = d.inMinutes.remainder(60).toString();
+  final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+  if (d.inHours > 0) {
+    return '${d.inHours}:${m.padLeft(2, '0')}:$s';
+  }
+  return '$m:$s';
+}
+
+class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
   double _dragY = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _enterController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 350),
-    )..forward();
-  }
-
-  @override
-  void dispose() {
-    _enterController.dispose();
-    super.dispose();
-  }
-
-  String _formatDuration(Duration d) {
-    final m = d.inMinutes.remainder(60).toString();
-    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
-    if (d.inHours > 0) {
-      return '${d.inHours}:$m:$s';
-    }
-    return '$m:$s';
-  }
 
   IconData _repeatIcon(PlayerRepeatMode mode) {
     return switch (mode) {
@@ -77,6 +60,16 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen>
                 },
               ),
             ListTile(
+              title: const Text('End of this track'),
+              onTap: () {
+                ref.read(playerProvider.notifier).setSleepTimer(
+                      Duration.zero,
+                      afterCurrentTrack: true,
+                    );
+                Navigator.pop(ctx);
+              },
+            ),
+            ListTile(
               title: const Text('Off', style: TextStyle(color: AppColors.error)),
               onTap: () {
                 ref.read(playerProvider.notifier).setSleepTimer(Duration.zero);
@@ -102,7 +95,8 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen>
         builder: (_, scrollController) {
           return Consumer(
             builder: (_, ref, __) {
-              final state = ref.watch(playerProvider);
+              final queue = ref.watch(playerProvider.select((s) => s.queue));
+              final currentId = ref.watch(playerProvider.select((s) => s.currentTrack?.id));
               return Column(
                 children: [
                   const SizedBox(height: 12),
@@ -126,13 +120,13 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen>
                   Expanded(
                     child: ReorderableListView.builder(
                       scrollController: scrollController,
-                      itemCount: state.queue.length,
-                      onReorder: (old, newIdx) {
+                      itemCount: queue.length,
+                      onReorderItem: (old, newIdx) {
                         ref.read(playerProvider.notifier).reorderQueue(old, newIdx);
                       },
                       itemBuilder: (_, i) {
-                        final track = state.queue[i];
-                        final isCurrent = state.currentTrack?.id == track.id;
+                        final track = queue[i];
+                        final isCurrent = currentId == track.id;
                         return ListTile(
                           key: ValueKey(track.id),
                           leading: ReorderableDragStartListener(
@@ -162,7 +156,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen>
                           onTap: isCurrent
                               ? null
                               : () {
-                                  ref.read(playerProvider.notifier).playTrack(track);
+                                  ref.read(playerProvider.notifier).skipToIndex(i);
                                   Navigator.pop(ctx);
                                 },
                         );
@@ -180,23 +174,16 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen>
 
   @override
   Widget build(BuildContext context) {
-    final player = ref.watch(playerProvider);
-    final track = player.currentTrack;
+    final track = ref.watch(playerProvider.select((s) => s.currentTrack));
     if (track == null) return const SizedBox.shrink();
+    final isPlaying = ref.watch(playerProvider.select((s) => s.isPlaying));
+    final shuffle = ref.watch(playerProvider.select((s) => s.shuffle));
+    final repeat = ref.watch(playerProvider.select((s) => s.repeat));
+    final playbackSpeed = ref.watch(playerProvider.select((s) => s.playbackSpeed));
+    final playlistName = ref.watch(playerProvider.select((s) => s.playlistName));
 
-    final progress = player.duration.inMilliseconds > 0
-        ? player.position.inMilliseconds / player.duration.inMilliseconds
-        : 0.0;
-
-    return AnimatedBuilder(
-      animation: _enterController,
-      builder: (_, child) {
-        final t = Curves.easeOutCubic.transform(_enterController.value);
-        return Transform.translate(
-          offset: Offset(0, (1 - t) * 40 + _dragY),
-          child: Opacity(opacity: t.clamp(0.0, 1.0), child: child),
-        );
-      },
+    return Transform.translate(
+      offset: Offset(0, _dragY),
       child: GestureDetector(
         onVerticalDragUpdate: (d) {
           if (d.delta.dy > 0 || _dragY > 0) {
@@ -229,7 +216,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen>
                           child: Column(
                             children: [
                               Text(
-                                player.playlistName ?? 'Now Playing',
+                                playlistName ?? 'Now Playing',
                                 style: const TextStyle(
                                   fontSize: 12,
                                   fontWeight: FontWeight.w500,
@@ -250,14 +237,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen>
                       ],
                     ),
                   ),
-                  if (player.sleepRemaining != null)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 32),
-                      child: Text(
-                        'Sleep in ${_formatDuration(player.sleepRemaining!)}',
-                        style: const TextStyle(color: AppColors.accent, fontSize: 12),
-                      ),
-                    ),
+                  const _SleepLabel(),
                   Expanded(
                     child: GestureDetector(
                       onHorizontalDragEnd: (d) {
@@ -340,7 +320,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen>
                               onPressed: () =>
                                   ref.read(playerProvider.notifier).cyclePlaybackSpeed(),
                               child: Text(
-                                '${player.playbackSpeed}x',
+                                '${playbackSpeed}x',
                                 style: const TextStyle(
                                   color: AppColors.textPrimary,
                                   fontWeight: FontWeight.w700,
@@ -356,57 +336,9 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen>
                       ],
                     ),
                   ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
-                    child: Column(
-                      children: [
-                        SliderTheme(
-                          data: SliderTheme.of(context).copyWith(
-                            trackHeight: 4,
-                            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-                            overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
-                            activeTrackColor: AppColors.accent,
-                            inactiveTrackColor: AppColors.surfaceHighlight,
-                            thumbColor: AppColors.textPrimary,
-                          ),
-                          child: Slider(
-                            value: progress.clamp(0.0, 1.0),
-                            onChangeStart: (_) {},
-                            onChanged: (v) {
-                              final pos = Duration(
-                                milliseconds: (v * player.duration.inMilliseconds).round(),
-                              );
-                              ref.read(playerProvider.notifier).seek(pos);
-                            },
-                            onChangeEnd: (_) {},
-                          ),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                _formatDuration(player.position),
-                                style: const TextStyle(
-                                  color: AppColors.textMuted,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                              Text(
-                                _formatDuration(player.duration),
-                                style: const TextStyle(
-                                  color: AppColors.textMuted,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(24, 24, 24, 0),
+                    child: _SeekBar(),
                   ),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
@@ -417,7 +349,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen>
                           onPressed: () => ref.read(playerProvider.notifier).toggleShuffle(),
                           child: Icon(
                             Icons.shuffle_rounded,
-                            color: player.shuffle ? AppColors.accent : AppColors.textMuted,
+                            color: shuffle ? AppColors.accent : AppColors.textMuted,
                             size: 24,
                           ),
                         ),
@@ -428,7 +360,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen>
                         ScaleButton(
                           onPressed: () => ref.read(playerProvider.notifier).togglePlay(),
                           child: Icon(
-                            player.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                            isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
                             size: 44,
                             color: AppColors.textPrimary,
                           ),
@@ -440,8 +372,8 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen>
                         ScaleButton(
                           onPressed: () => ref.read(playerProvider.notifier).cycleRepeat(),
                           child: Icon(
-                            _repeatIcon(player.repeat),
-                            color: player.repeat != PlayerRepeatMode.off
+                            _repeatIcon(repeat),
+                            color: repeat != PlayerRepeatMode.off
                                 ? AppColors.accent
                                 : AppColors.textMuted,
                             size: 24,
@@ -456,6 +388,92 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen>
           ),
         ),
       ),
+    );
+  }
+}
+
+class _SleepLabel extends ConsumerWidget {
+  const _SleepLabel();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final sleepEndsAt = ref.watch(playerProvider.select((s) => s.sleepEndsAt));
+    if (sleepEndsAt == null) return const SizedBox.shrink();
+    ref.watch(playerProvider.select((s) => s.position.inSeconds));
+    final left = sleepEndsAt.difference(DateTime.now());
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 32),
+      child: Text(
+        'Sleep in ${_formatDuration(left.isNegative ? Duration.zero : left)}',
+        style: const TextStyle(color: AppColors.accent, fontSize: 12),
+      ),
+    );
+  }
+}
+
+class _SeekBar extends ConsumerStatefulWidget {
+  const _SeekBar();
+
+  @override
+  ConsumerState<_SeekBar> createState() => _SeekBarState();
+}
+
+class _SeekBarState extends ConsumerState<_SeekBar> {
+  double? _dragValue;
+
+  static const _timeStyle = TextStyle(
+    color: AppColors.textMuted,
+    fontSize: 12,
+    fontWeight: FontWeight.w500,
+    fontFeatures: [FontFeature.tabularFigures()],
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final position = ref.watch(playerProvider.select((s) => s.position));
+    final duration = ref.watch(playerProvider.select((s) => s.duration));
+    final totalMs = duration.inMilliseconds;
+    final live = totalMs > 0 ? position.inMilliseconds / totalMs : 0.0;
+    final value = (_dragValue ?? live).clamp(0.0, 1.0);
+    final shown = _dragValue != null ? Duration(milliseconds: (value * totalMs).round()) : position;
+
+    return Column(
+      children: [
+        SliderTheme(
+          data: SliderTheme.of(context).copyWith(
+            trackHeight: 4,
+            thumbShape: RoundSliderThumbShape(enabledThumbRadius: _dragValue != null ? 8 : 6),
+            overlayShape: const RoundSliderOverlayShape(overlayRadius: 18),
+            activeTrackColor: AppColors.accent,
+            inactiveTrackColor: AppColors.surfaceHighlight,
+            thumbColor: AppColors.textPrimary,
+          ),
+          child: Slider(
+            value: value,
+            onChangeStart: totalMs > 0 ? (v) => setState(() => _dragValue = v) : null,
+            onChanged: totalMs > 0 ? (v) => setState(() => _dragValue = v) : null,
+            onChangeEnd: totalMs > 0
+                ? (v) async {
+                    HapticFeedback.selectionClick();
+                    await ref
+                        .read(playerProvider.notifier)
+                        .seek(Duration(milliseconds: (v * totalMs).round()));
+                    if (mounted) setState(() => _dragValue = null);
+                  }
+                : null,
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(_formatDuration(shown), style: _timeStyle),
+              Text(_formatDuration(duration), style: _timeStyle),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

@@ -50,13 +50,10 @@ class _MiniPlayerBarState extends ConsumerState<MiniPlayerBar> {
 
   @override
   Widget build(BuildContext context) {
-    final player = ref.watch(playerProvider);
-    if (!player.hasTrack) return const SizedBox.shrink();
-
-    final track = player.currentTrack!;
-    final progress = player.duration.inMilliseconds > 0
-        ? player.position.inMilliseconds / player.duration.inMilliseconds
-        : 0.0;
+    final track = ref.watch(playerProvider.select((s) => s.currentTrack));
+    if (track == null) return const SizedBox.shrink();
+    final isPlaying = ref.watch(playerProvider.select((s) => s.isPlaying));
+    final shuffle = ref.watch(playerProvider.select((s) => s.shuffle));
 
     return Container(
       decoration: BoxDecoration(
@@ -75,14 +72,7 @@ class _MiniPlayerBarState extends ConsumerState<MiniPlayerBar> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ClipRRect(
-              child: LinearProgressIndicator(
-                value: progress.clamp(0.0, 1.0),
-                minHeight: 2,
-                backgroundColor: Colors.transparent,
-                color: AppColors.accent,
-              ),
-            ),
+            const _MiniProgress(),
             SizedBox(
               height: 60,
               child: Row(
@@ -180,13 +170,13 @@ class _MiniPlayerBarState extends ConsumerState<MiniPlayerBar> {
                   Material(
                     color: Colors.transparent,
                     child: IconButton(
-                      tooltip: player.shuffle ? 'Shuffle on' : 'Shuffle off',
+                      tooltip: shuffle ? 'Shuffle on' : 'Shuffle off',
                       iconSize: 22,
                       padding: const EdgeInsets.all(8),
                       constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
                       icon: Icon(
                         Icons.shuffle_rounded,
-                        color: player.shuffle ? AppColors.accent : AppColors.textMuted,
+                        color: shuffle ? AppColors.accent : AppColors.textMuted,
                       ),
                       onPressed: () => ref.read(playerProvider.notifier).toggleShuffle(),
                     ),
@@ -205,12 +195,12 @@ class _MiniPlayerBarState extends ConsumerState<MiniPlayerBar> {
                   Material(
                     color: Colors.transparent,
                     child: IconButton(
-                      tooltip: player.isPlaying ? 'Pause' : 'Play',
+                      tooltip: isPlaying ? 'Pause' : 'Play',
                       iconSize: 30,
                       padding: const EdgeInsets.all(8),
                       constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
                       icon: Icon(
-                        player.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                        isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
                         color: AppColors.textPrimary,
                       ),
                       onPressed: () => ref.read(playerProvider.notifier).togglePlay(),
@@ -238,15 +228,44 @@ class _MiniPlayerBarState extends ConsumerState<MiniPlayerBar> {
   }
 }
 
+class _MiniProgress extends ConsumerWidget {
+  const _MiniProgress();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final position = ref.watch(playerProvider.select((s) => s.position));
+    final duration = ref.watch(playerProvider.select((s) => s.duration));
+    final progress =
+        duration.inMilliseconds > 0 ? position.inMilliseconds / duration.inMilliseconds : 0.0;
+    return LinearProgressIndicator(
+      value: progress.clamp(0.0, 1.0),
+      minHeight: 2,
+      backgroundColor: Colors.transparent,
+      color: AppColors.accent,
+    );
+  }
+}
+
 void openNowPlaying(BuildContext context) {
   Navigator.of(context).push(
     PageRouteBuilder(
       opaque: true,
-      transitionDuration: const Duration(milliseconds: 280),
-      reverseTransitionDuration: const Duration(milliseconds: 240),
+      transitionDuration: const Duration(milliseconds: 320),
+      reverseTransitionDuration: const Duration(milliseconds: 260),
       pageBuilder: (context, animation, secondaryAnimation) => NowPlayingScreen(
         onDismiss: () => Navigator.of(context).pop(),
       ),
+      transitionsBuilder: (context, animation, secondaryAnimation, child) {
+        final curved = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+          reverseCurve: Curves.easeInCubic,
+        );
+        return SlideTransition(
+          position: Tween(begin: const Offset(0, 1), end: Offset.zero).animate(curved),
+          child: child,
+        );
+      },
     ),
   );
 }

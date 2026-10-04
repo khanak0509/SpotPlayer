@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
 
-/// Compact offline hint — no long instructions.
 class OfflineBanner extends StatelessWidget {
   const OfflineBanner({super.key});
 
