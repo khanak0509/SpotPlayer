@@ -17,6 +17,7 @@ import 'services/server_connectivity.dart';
 import 'services/settings_store.dart' show bootstrapServerUrl, settingsStoreProvider, serverUrlProvider;
 import 'services/user_prefs_store.dart';
 import 'services/widget_service.dart';
+import 'services/update_service.dart';
 import 'theme/app_theme.dart';
 
 void main() async {
@@ -114,6 +115,7 @@ class _SpotPlayerAppState extends ConsumerState<SpotPlayerApp> with WidgetsBindi
           ref.read(libraryProvider.notifier).load();
         }
       });
+      ref.invalidate(updateMessageProvider);
     } else if (state == AppLifecycleState.paused) {
       unawaited(ref.read(playbackSessionProvider).touchEndedAt());
     }
