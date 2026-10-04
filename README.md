@@ -12,7 +12,8 @@ Your computer is only needed **while importing or syncing**. After that, the app
 
 - Import **playlist / album / track** links (Liked Songs needs a public playlist — no Spotify login)
 - Offline MP3 library with search, favorites, recents
-- Full player: shuffle (restores order when off), repeat, queue, sleep timer, speed
+- Local **reminders** (download finished, continue listening)
+- Full player: shuffle (restores order when off), repeat, queue, sleep timer (incl. end of track), speed
 - Gapless + optional smooth fade between tracks
 - Resume last song and position after app kill (starts paused)
 - Background play, notification shade, AirPods next/prev
