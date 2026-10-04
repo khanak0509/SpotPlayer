@@ -63,7 +63,6 @@ class LocalStore {
     await reclaimOrphanTracks();
   }
 
-  /// Deletes local MP3s that no remaining playlist references.
   Future<int> reclaimOrphanTracks({Set<String> keepIds = const {}}) async {
     final referenced = <String>{...keepIds};
     for (final key in _playlists!.keys) {
@@ -243,7 +242,6 @@ class LocalStore {
 
 final trackSyncProvider = Provider((ref) => TrackSyncService(ref));
 
-/// Bumps when a local file is saved/removed so progress UI rebuilds.
 final libraryTickProvider = StateProvider<int>((ref) => 0);
 
 class TrackSyncService {
@@ -294,7 +292,6 @@ class TrackSyncService {
         .where((t) => !store.hasTrack(t.id) && t.status == TrackStatus.ready)
         .toList();
 
-    // Parallel pull — cap in-flight downloads via _activeDownloads.
     const batchSize = 4;
     for (var i = 0; i < toDownload.length; i += batchSize) {
       final chunk = toDownload.skip(i).take(batchSize);

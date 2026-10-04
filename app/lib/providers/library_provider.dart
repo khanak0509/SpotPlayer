@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/models.dart';
 import '../services/api.dart';
 import '../services/local_store.dart';
+import '../services/notification_service.dart';
 import '../services/server_connectivity.dart';
 import '../services/settings_store.dart';
 import '../services/user_prefs_store.dart';
@@ -99,6 +100,20 @@ class LibraryNotifier extends StateNotifier<LibraryState> {
 
     if (_wasSyncing && !anySyncing) {
       HapticFeedback.mediumImpact();
+      for (final summary in updated) {
+        final detail = store.getPlaylist(summary.id);
+        if (detail == null) continue;
+        final saved = store.localSavedCount(detail.tracks);
+        if (saved > 0) {
+          unawaited(
+            ref.read(notificationServiceProvider).notifyDownloadBatchFinished(
+                  summary.name,
+                  saved,
+                ),
+          );
+          break;
+        }
+      }
     }
     _wasSyncing = anySyncing;
     state = state.copyWith(playlists: updated);
@@ -128,9 +143,7 @@ class LibraryNotifier extends StateNotifier<LibraryState> {
       await store.savePlaylist(detail);
       try {
         await sync.queueTracks(detail.tracks);
-      } catch (_) {
-        // Import succeeded; queue can retry on next refresh.
-      }
+      } catch (_) {}
 
       await load();
       return store.getAllPlaylists().firstWhere((p) => p.id == detail.id);
@@ -221,7 +234,7 @@ class LibraryNotifier extends StateNotifier<LibraryState> {
       }
 
       await store.savePlaylist(merged);
-      ref.read(trackSyncProvider).queueTracks(merged.tracks);
+      await ref.read(trackSyncProvider).queueTracks(merged.tracks);
       await load();
     } catch (e) {
       state = state.copyWith(error: e.toString());
