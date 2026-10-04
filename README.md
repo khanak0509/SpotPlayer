@@ -1,6 +1,6 @@
 <div align="center">
   <h1>🎶 SpotPlayer</h1>
-  <p><b>If you are a dev and still paying to listen to music, then this is for you. Thank me later... 🚀</b></p>
+  <p><b>If you are a developer and still paying to listen to music, then this is for you. Thank me later... 🚀</b></p>
   
   <p>
     <a href="https://flutter.dev"><img src="https://img.shields.io/badge/Flutter-02569B?style=for-the-badge&logo=flutter&logoColor=white" alt="Flutter"></a>
@@ -8,7 +8,6 @@
     <a href="https://www.docker.com/"><img src="https://img.shields.io/badge/Docker-2CA5E0?style=for-the-badge&logo=docker&logoColor=white" alt="Docker"></a>
     <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python"></a>
     <img src="https://img.shields.io/badge/Offline-100%25-brightgreen?style=for-the-badge" alt="Offline">
-    <img src="https://img.shields.io/badge/Open_Source-❤️-ff69b4?style=for-the-badge" alt="Open Source">
   </p>
 </div>
 
@@ -26,7 +25,7 @@ Your computer is only needed **while importing or syncing**. After that, take yo
 - 📥 **One-Click Imports:** Just paste a playlist, album, or track link. SpotPlayer handles the rest.
 - 🎧 **True Offline Experience:** Music stays on your phone. No internet? No problem.
 - ⚡ **Lightning Fast Downloads:** Powered by parallel Python workers in a Docker container.
-- 🎨 **Premium UI/UX:** A stunning teal-on-black interface built with Flutter, featuring gapless playback, smooth crossfading, and real-time listening stats.
+
 - 📱 **Native Integration:** Full background play, Android Auto support, lock-screen media controls, AirPods support, and an interactive Android home widget.
 - 🧠 **Smart Memory:** Remembers your exact position and queue after closing the app.
 
@@ -83,5 +82,5 @@ start.bat
 
 <div align="center">
   <br/>
-  <i>Built with ❤️ for devs who love music.</i>
+  <i>Built with ❤️ for developers who love music.</i>
 </div>
