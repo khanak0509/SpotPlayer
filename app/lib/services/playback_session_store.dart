@@ -77,6 +77,7 @@ class PlaybackSession {
 class PlaybackSessionStore {
   static const _boxName = 'playback_session';
   static const _key = 'session';
+  static const _endedKey = 'last_ended_at_ms';
   Box<String>? _box;
 
   Future<void> init() async {
@@ -101,6 +102,20 @@ class PlaybackSessionStore {
       return;
     }
     await _box!.put(_key, jsonEncode(session.toJson()));
+    await _box!.put(_endedKey, DateTime.now().millisecondsSinceEpoch.toString());
+  }
+
+  Future<DateTime?> lastSessionEndedAt() async {
+    await init();
+    final raw = _box!.get(_endedKey);
+    final ms = int.tryParse(raw ?? '');
+    if (ms == null || ms <= 0) return null;
+    return DateTime.fromMillisecondsSinceEpoch(ms);
+  }
+
+  Future<void> touchEndedAt() async {
+    await init();
+    await _box!.put(_endedKey, DateTime.now().millisecondsSinceEpoch.toString());
   }
 
   Future<void> clear() async {

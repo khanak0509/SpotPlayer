@@ -11,7 +11,6 @@ class WidgetService {
   Future<void> init() async {
     try {
       await HomeWidget.setAppGroupId('group.com.spotplayer.spotplayer');
-      // Controls are wired in Kotlin via MediaButtonReceiver (play/pause/next/prev).
       await HomeWidget.registerInteractivityCallback(_backgroundCallback);
     } catch (_) {}
   }

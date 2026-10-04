@@ -10,41 +10,51 @@ final userPrefsProvider = StateNotifierProvider<UserPrefsNotifier, UserPrefs>((r
 });
 
 class UserPrefs {
-  final Set<String> favoriteIds;
+  final Map<String, int> favoriteLikedAt;
   final List<Track> recentTracks;
   final bool onboardingComplete;
   final bool autoSync;
   final bool crossfade;
+  final bool remindersEnabled;
   final double playbackSpeed;
+  final int lastContinueNotifMs;
 
   const UserPrefs({
-    this.favoriteIds = const {},
+    this.favoriteLikedAt = const {},
     this.recentTracks = const [],
     this.onboardingComplete = false,
     this.autoSync = false,
     this.crossfade = false,
+    this.remindersEnabled = true,
     this.playbackSpeed = 1.0,
+    this.lastContinueNotifMs = 0,
   });
 
+  Set<String> get favoriteIds => favoriteLikedAt.keys.toSet();
+
   UserPrefs copyWith({
-    Set<String>? favoriteIds,
+    Map<String, int>? favoriteLikedAt,
     List<Track>? recentTracks,
     bool? onboardingComplete,
     bool? autoSync,
     bool? crossfade,
+    bool? remindersEnabled,
     double? playbackSpeed,
+    int? lastContinueNotifMs,
   }) {
     return UserPrefs(
-      favoriteIds: favoriteIds ?? this.favoriteIds,
+      favoriteLikedAt: favoriteLikedAt ?? this.favoriteLikedAt,
       recentTracks: recentTracks ?? this.recentTracks,
       onboardingComplete: onboardingComplete ?? this.onboardingComplete,
       autoSync: autoSync ?? this.autoSync,
       crossfade: crossfade ?? this.crossfade,
+      remindersEnabled: remindersEnabled ?? this.remindersEnabled,
       playbackSpeed: playbackSpeed ?? this.playbackSpeed,
+      lastContinueNotifMs: lastContinueNotifMs ?? this.lastContinueNotifMs,
     );
   }
 
-  bool isFavorite(String trackId) => favoriteIds.contains(trackId);
+  bool isFavorite(String trackId) => favoriteLikedAt.containsKey(trackId);
 }
 
 class UserPrefsNotifier extends StateNotifier<UserPrefs> {
@@ -52,33 +62,50 @@ class UserPrefsNotifier extends StateNotifier<UserPrefs> {
 
   static const _boxName = 'user_prefs';
   Box<String>? _box;
+  Future<void>? _opening;
 
-  Future<void> init() async {
-    _box ??= await Hive.openBox<String>(_boxName);
-    state = _load();
+  Future<void> init() {
+    return _opening ??= () async {
+      _box = await Hive.openBox<String>(_boxName);
+      state = _load();
+    }();
   }
 
   UserPrefs _load() {
     if (_box == null) return const UserPrefs();
-    final favorites = _decodeStringList(_box!.get('favorite_ids'));
-    final recent = _decodeTracks(_box!.get('recent_tracks'));
     return UserPrefs(
-      favoriteIds: favorites.toSet(),
-      recentTracks: recent,
+      favoriteLikedAt: _decodeFavorites(_box!.get('favorite_ids')),
+      recentTracks: _decodeTracks(_box!.get('recent_tracks')),
       onboardingComplete: _box!.get('onboarding_complete') == 'true',
       autoSync: _box!.get('auto_sync') == 'true',
       crossfade: _box!.get('crossfade') == 'true',
+      remindersEnabled: _box!.get('reminders_enabled') != 'false',
       playbackSpeed: double.tryParse(_box!.get('playback_speed') ?? '') ?? 1.0,
+      lastContinueNotifMs: int.tryParse(_box!.get('last_continue_notif_ms') ?? '') ?? 0,
     );
   }
 
-  List<String> _decodeStringList(String? raw) {
-    if (raw == null || raw.isEmpty) return [];
+  Map<String, int> _decodeFavorites(String? raw) {
+    if (raw == null || raw.isEmpty) return {};
     try {
-      return (jsonDecode(raw) as List).cast<String>();
-    } catch (_) {
-      return [];
-    }
+      final decoded = jsonDecode(raw);
+      if (decoded is Map) {
+        return decoded.map((k, v) => MapEntry(k.toString(), (v as num).toInt()));
+      }
+      if (decoded is List) {
+        final now = DateTime.now().millisecondsSinceEpoch;
+        final map = <String, int>{
+          for (final id in decoded.cast<String>()) id: now,
+        };
+        unawaitedPersistFavorites(map);
+        return map;
+      }
+    } catch (_) {}
+    return {};
+  }
+
+  void unawaitedPersistFavorites(Map<String, int> map) {
+    Future.microtask(() => _persist('favorite_ids', jsonEncode(map)));
   }
 
   List<Track> _decodeTracks(String? raw) {
@@ -99,14 +126,14 @@ class UserPrefsNotifier extends StateNotifier<UserPrefs> {
 
   Future<void> toggleFavorite(String trackId) async {
     await init();
-    final next = Set<String>.from(state.favoriteIds);
-    if (next.contains(trackId)) {
+    final next = Map<String, int>.from(state.favoriteLikedAt);
+    if (next.containsKey(trackId)) {
       next.remove(trackId);
     } else {
-      next.add(trackId);
+      next[trackId] = DateTime.now().millisecondsSinceEpoch;
     }
-    state = state.copyWith(favoriteIds: next);
-    await _persist('favorite_ids', jsonEncode(next.toList()));
+    state = state.copyWith(favoriteLikedAt: next);
+    await _persist('favorite_ids', jsonEncode(next));
   }
 
   Future<void> addRecentTrack(Track track) async {
@@ -134,10 +161,23 @@ class UserPrefsNotifier extends StateNotifier<UserPrefs> {
     await _persist('crossfade', value.toString());
   }
 
+  Future<void> setRemindersEnabled(bool value) async {
+    await init();
+    state = state.copyWith(remindersEnabled: value);
+    await _persist('reminders_enabled', value.toString());
+  }
+
   Future<void> setPlaybackSpeed(double speed) async {
     await init();
     state = state.copyWith(playbackSpeed: speed);
     await _persist('playback_speed', speed.toString());
+  }
+
+  Future<void> markContinueListeningNotifShown() async {
+    await init();
+    final now = DateTime.now().millisecondsSinceEpoch;
+    state = state.copyWith(lastContinueNotifMs: now);
+    await _persist('last_continue_notif_ms', now.toString());
   }
 }
 
