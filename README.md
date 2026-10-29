@@ -35,6 +35,10 @@ Your computer is only needed **while importing or syncing**. After that, take yo
 
 ## 🧩 How It Works
 
+<p align="center">
+  <img src="assets/how-it-works.svg" alt="Paste a Spotify link, the backend downloads the songs, then play them offline" width="100%">
+</p>
+
 ```mermaid
 flowchart LR
   A[📱 SpotPlayer app] -- Spotify link --> B[🖥️ Backend on your computer]
@@ -58,7 +62,10 @@ SpotPlayer is a beautiful marriage of modern technologies:
 ## 📋 Prerequisites
 
 - An **Android phone**
-- A computer (Mac, Linux, or Windows) with **[Docker Desktop](https://www.docker.com/products/docker-desktop/)** installed and running
+- A computer (Mac, Windows, or Linux) with Docker installed and running:
+  - **Mac:** [Docker Desktop for Mac](https://docs.docker.com/desktop/setup/install/mac-install/)
+  - **Windows:** [Docker Desktop for Windows](https://docs.docker.com/desktop/setup/install/windows-install/)
+  - **Linux:** [Docker Engine](https://docs.docker.com/engine/install/) with the Compose plugin
 - Phone and computer on the **same Wi-Fi network**
 
 ---
@@ -71,13 +78,16 @@ We’ve made setup as painless as possible. You only need your computer for the 
 Download **[SpotPlayer.apk](SpotPlayer.apk)** on your phone and install it.
 
 ### Step 2: Spin Up the Engine
-Make sure Docker Desktop is running. From the root directory, launch the backend:
-```bash
-# Mac / Linux
-./start.sh        
+Make sure Docker is running, then launch the backend from the project folder:
 
-# Windows
-start.bat         
+**Mac / Linux** (Terminal)
+```bash
+./start.sh
+```
+
+**Windows** (Command Prompt or PowerShell)
+```bat
+start.bat
 ```
 *The terminal will print a shiny API URL (e.g., `http://192.168.1.42:8000/api`). Keep this handy!*
 
@@ -118,7 +128,16 @@ Install `app/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk` on your ph
 
 - Check that the phone and computer are on the **same Wi-Fi**.
 - Campus, office, and hotel Wi-Fi often block devices from talking to each other. Use home Wi-Fi or a phone hotspot instead.
-- Allow port **8000** through your computer's firewall.
+- Allow port **8000** through your computer's firewall:
+  - **Mac:** System Settings → Network → Firewall → Options, and allow incoming connections for Docker.
+  - **Windows** (PowerShell as Administrator):
+    ```powershell
+    netsh advfirewall firewall add rule name="SpotPlayer" dir=in action=allow protocol=TCP localport=8000
+    ```
+  - **Linux:**
+    ```bash
+    sudo ufw allow 8000/tcp
+    ```
 - Make sure the URL ends with `/api`, exactly as `start.sh` printed it.
 
 </details>
@@ -127,18 +146,32 @@ Install `app/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk` on your ph
 <summary><b>Downloads suddenly started failing</b></summary>
 
 YouTube changes things regularly, and yt-dlp ships fixes quickly. Rebuild the backend to get the newest yt-dlp:
+
+**Mac / Linux**
 ```bash
 docker compose build --no-cache
 ./start.sh
+```
+
+**Windows**
+```bat
+docker compose build --no-cache
+start.bat
 ```
 Without `--no-cache`, Docker reuses the old yt-dlp it already has.
 
 </details>
 
 <details>
-<summary><b><code>start.sh</code> fails with a Docker error</b></summary>
+<summary><b><code>start.sh</code> / <code>start.bat</code> fails with a Docker error</b></summary>
 
-Docker Desktop must be installed and running before you start the backend. Open Docker Desktop, wait until it says it is running, then try again.
+Docker must be installed and running before you start the backend.
+
+- **Mac / Windows:** open Docker Desktop and wait until it says it is running, then try again.
+- **Linux:** start the Docker service, then try again:
+  ```bash
+  sudo systemctl start docker
+  ```
 
 </details>
 
