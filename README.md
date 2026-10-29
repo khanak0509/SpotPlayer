@@ -16,11 +16,9 @@
 ---
 
 ## ✨ Why SpotPlayer?
-Stop paying for subscriptions just to listen to your music offline. **SpotPlayer** is a sleek, completely offline music player built for power users. 
+You're a dev. You can spin up a Docker container in your sleep. So why are you still paying Spotify every month? 💸
 
-Paste a Spotify link. The app talks to a self-hosted local backend, which finds the best matching version of every song on YouTube, saves it as a high-quality MP3, and syncs it to your phone. Boom, your music lives on your device forever. No ads, no streaming buffers, no monthly fees.
-
-Your computer is only needed **while importing or syncing**. After that, take your phone anywhere and enjoy your completely offline library.
+Paste a link → your own backend grabs the songs → they live on your phone forever. No ads, no subscription, no internet needed. 🎧
 
 ## 🚀 Features That Wow
 
@@ -183,5 +181,5 @@ SpotPlayer is a personal project for personal use. Downloading audio from YouTub
 
 <div align="center">
   <br/>
-  <i>Built with ❤️ for developers who love music.</i>
+  <b>Stop renting your music. Own it. Thank me later 😎🎶</b>
 </div>
