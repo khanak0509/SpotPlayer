@@ -18,11 +18,11 @@
 ## ✨ Why SpotPlayer?
 You're a dev. You can spin up a Docker container in your sleep. So why are you still paying Spotify every month? 💸
 
-Paste a link → your own backend grabs the songs → they live on your phone forever. No ads, no subscription, no internet needed. 🎧
+Paste a Spotify or YouTube link → your own backend grabs the songs → they live on your phone forever. No ads, no subscription, no internet needed. 🎧
 
 ## 🚀 Features That Wow
 
-- 📥 **One-Click Imports:** Just paste a playlist, album, or track link. SpotPlayer handles the rest.
+- 📥 **One-Click Imports:** Paste a Spotify or YouTube playlist, album, or track link. SpotPlayer handles the rest.
 - 🎧 **True Offline Experience:** Music stays on your phone. No internet? No problem.
 - ⚡ **Lightning Fast Downloads:** Powered by parallel Python workers in a Docker container.
 - 🎯 **Smart Matching:** Prefers official uploads and skips covers, live versions, remixes, and lyric videos.
@@ -92,7 +92,7 @@ start.bat
 ### Step 3: Sync & Play
 1. Open SpotPlayer on your phone.
 2. Go to **Settings → Server** and paste your API URL.
-3. Tap the **+** button and paste any Spotify link.
+3. Tap the **+** button and paste any Spotify or YouTube link.
 4. Watch the magic happen, then hit **Play**! 🎉
 
 *Once your songs are downloaded, press `Ctrl+C` on your computer. Your music is now safely in your pocket.*
