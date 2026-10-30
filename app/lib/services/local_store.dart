@@ -19,25 +19,27 @@ class LocalStore {
 
   Box<String>? _playlists;
   Box<String>? _tracks;
+  final _present = <String>{};
 
   Future<void> init() async {
     await Hive.initFlutter();
     _playlists = await Hive.openBox<String>(_playlistsBox);
     _tracks = await Hive.openBox<String>(_tracksBox);
+    _present.clear();
+    for (final key in _tracks!.keys) {
+      final path = _tracks!.get(key);
+      if (path != null && File(path).existsSync()) _present.add(key as String);
+    }
   }
 
   List<PlaylistSummary> getAllPlaylists() {
-    final entries = <MapEntry<String, String>>[];
+    final maps = <Map<String, dynamic>>[];
     for (final key in _playlists!.keys) {
       final val = _playlists!.get(key);
-      if (val != null) entries.add(MapEntry(key, val));
+      if (val != null) maps.add(jsonDecode(val) as Map<String, dynamic>);
     }
-    entries.sort((a, b) {
-      final aAt = (jsonDecode(a.value) as Map)['imported_at'] as String? ?? '';
-      final bAt = (jsonDecode(b.value) as Map)['imported_at'] as String? ?? '';
-      return bAt.compareTo(aAt);
-    });
-    return entries.map((e) => _summaryFromMap(jsonDecode(e.value) as Map<String, dynamic>)).toList();
+    maps.sort((a, b) => (b['imported_at'] as String? ?? '').compareTo(a['imported_at'] as String? ?? ''));
+    return maps.map(_summaryFromMap).toList();
   }
 
   PlaylistDetail? getPlaylist(String id) {
@@ -83,18 +85,17 @@ class LocalStore {
     return removed;
   }
 
-  bool hasTrack(String trackId) {
-    final path = _tracks!.get(trackId);
-    return path != null && File(path).existsSync();
-  }
+  bool hasTrack(String trackId) => _present.contains(trackId);
 
   String? getTrackPath(String trackId) {
     final path = _tracks!.get(trackId);
     if (path != null && File(path).existsSync()) return path;
+    _present.remove(trackId);
     return null;
   }
 
   Future<void> saveTrackPath(String trackId, String path) {
+    _present.add(trackId);
     return _tracks!.put(trackId, path);
   }
 
@@ -104,6 +105,7 @@ class LocalStore {
       final f = File(path);
       if (await f.exists()) await f.delete();
     }
+    _present.remove(trackId);
     await _tracks!.delete(trackId);
   }
 
@@ -112,6 +114,7 @@ class LocalStore {
       final f = File(path);
       if (await f.exists()) await f.delete();
     }
+    _present.clear();
     await _tracks!.clear();
 
     for (final key in _playlists!.keys.toList()) {
@@ -139,11 +142,11 @@ class LocalStore {
 
   int get cachedTrackCount => _tracks!.length;
 
-  Future<String> trackFilePath(String trackId) async {
+  Future<String> trackFilePath(String trackId, {String ext = 'mp3'}) async {
     final dir = await getApplicationDocumentsDirectory();
     final audioDir = Directory('${dir.path}/tracks');
     if (!await audioDir.exists()) await audioDir.create(recursive: true);
-    return '${audioDir.path}/$trackId.mp3';
+    return '${audioDir.path}/$trackId.$ext';
   }
 
   PlaylistSummary _summaryFromMap(Map<String, dynamic> map) {
@@ -364,14 +367,15 @@ class TrackSyncService {
     if (existing != null) return existing;
 
     final api = ref.read(apiProvider);
-    final dest = await store.trackFilePath(track.id);
-    final tmp = '$dest.part';
+    final tmp = await store.trackFilePath(track.id, ext: 'part');
 
     try {
-      await Dio(BaseOptions(
+      final res = await Dio(BaseOptions(
         connectTimeout: const Duration(seconds: 30),
         receiveTimeout: const Duration(minutes: 5),
       )).download(api.streamUrl(track.id), tmp);
+      final type = res.headers.value(Headers.contentTypeHeader) ?? '';
+      final dest = await store.trackFilePath(track.id, ext: type.contains('mp4') ? 'm4a' : 'mp3');
       await File(tmp).rename(dest);
       await store.saveTrackPath(track.id, dest);
       return dest;

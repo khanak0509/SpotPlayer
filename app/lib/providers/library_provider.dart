@@ -9,6 +9,7 @@ import '../services/local_store.dart';
 import '../services/notification_service.dart';
 import '../services/server_connectivity.dart';
 import '../services/settings_store.dart';
+import '../services/sync_keep_alive.dart';
 import '../services/user_prefs_store.dart';
 import 'player_provider.dart';
 
@@ -79,8 +80,9 @@ class LibraryNotifier extends StateNotifier<LibraryState> {
   }
 
   Future<void> _refreshSyncing() async {
-    if (!ref.read(serverReachableProvider)) return;
-    if (!state.playlists.any((p) => p.syncing)) return;
+    final active = ref.read(serverReachableProvider) && state.playlists.any((p) => p.syncing);
+    unawaited(SyncKeepAlive.update(active));
+    if (!active) return;
 
     final store = ref.read(localStoreProvider);
     final sync = ref.read(trackSyncProvider);
@@ -118,7 +120,10 @@ class LibraryNotifier extends StateNotifier<LibraryState> {
     _wasSyncing = anySyncing;
     state = state.copyWith(playlists: updated);
 
-    if (!anySyncing) _pollTimer?.cancel();
+    if (!anySyncing) {
+      _pollTimer?.cancel();
+      unawaited(SyncKeepAlive.update(false));
+    }
   }
 
   Future<PlaylistSummary?> importPlaylist(String url) async {
@@ -148,7 +153,7 @@ class LibraryNotifier extends StateNotifier<LibraryState> {
       await load();
       return store.getAllPlaylists().firstWhere((p) => p.id == detail.id);
     } catch (e) {
-      state = state.copyWith(error: e.toString());
+      state = state.copyWith(error: friendlyError(e));
       return null;
     }
   }
@@ -212,7 +217,7 @@ class LibraryNotifier extends StateNotifier<LibraryState> {
       await load();
       _startPolling();
     } catch (e) {
-      state = state.copyWith(error: e.toString());
+      state = state.copyWith(error: friendlyError(e));
     }
   }
 
@@ -237,7 +242,7 @@ class LibraryNotifier extends StateNotifier<LibraryState> {
       await ref.read(trackSyncProvider).queueTracks(merged.tracks);
       await load();
     } catch (e) {
-      state = state.copyWith(error: e.toString());
+      state = state.copyWith(error: friendlyError(e));
     }
   }
 

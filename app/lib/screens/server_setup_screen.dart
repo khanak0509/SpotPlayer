@@ -5,6 +5,7 @@ import '../services/server_connectivity.dart';
 import '../services/settings_store.dart';
 import '../theme/app_theme.dart';
 import '../widgets/scale_button.dart';
+import 'qr_scan_screen.dart';
 
 class ServerSetupScreen extends ConsumerStatefulWidget {
   const ServerSetupScreen({super.key});
@@ -48,6 +49,13 @@ class _ServerSetupScreenState extends ConsumerState<ServerSetupScreen> {
     }
   }
 
+  Future<void> _scan() async {
+    final url = await scanServerQr(context);
+    if (url == null || !mounted) return;
+    _controller.text = url;
+    await _connect();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -70,7 +78,7 @@ class _ServerSetupScreenState extends ConsumerState<ServerSetupScreen> {
               ),
               const SizedBox(height: 12),
               Text(
-                'Run start.sh, then paste the URL.',
+                'Run start.sh, then scan the QR code or paste the URL.',
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: AppColors.textSecondary,
@@ -87,6 +95,11 @@ class _ServerSetupScreenState extends ConsumerState<ServerSetupScreen> {
                   hintText: SettingsStore.serverUrlExample,
                   hintStyle: const TextStyle(color: AppColors.textMuted),
                   errorText: _error,
+                  suffixIcon: IconButton(
+                    icon: const Icon(Icons.qr_code_scanner_rounded, color: AppColors.accent),
+                    tooltip: 'Scan QR code',
+                    onPressed: _connecting ? null : _scan,
+                  ),
                   filled: true,
                   fillColor: AppColors.surfaceHighlight,
                   border: OutlineInputBorder(

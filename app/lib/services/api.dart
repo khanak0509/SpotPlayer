@@ -128,3 +128,20 @@ class ImportResult {
     );
   }
 }
+
+String friendlyError(Object e) {
+  if (e is! DioException) return e.toString();
+  final data = e.response?.data;
+  if (data is Map && data['detail'] is String) return data['detail'] as String;
+  switch (e.type) {
+    case DioExceptionType.connectionTimeout:
+    case DioExceptionType.sendTimeout:
+    case DioExceptionType.receiveTimeout:
+      return 'Server took too long to respond. Try again.';
+    case DioExceptionType.connectionError:
+      return "Can't reach the server. Is start.sh running on the same Wi-Fi?";
+    default:
+      final code = e.response?.statusCode;
+      return code == null ? 'Something went wrong. Try again.' : 'Server error ($code). Try again.';
+  }
+}

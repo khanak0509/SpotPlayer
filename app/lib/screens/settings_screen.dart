@@ -8,6 +8,7 @@ import '../services/settings_store.dart';
 import '../services/user_prefs_store.dart';
 import '../theme/app_theme.dart';
 import 'onboarding_screen.dart';
+import 'qr_scan_screen.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -77,6 +78,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
 
+  Future<void> _scanServer() async {
+    final url = await scanServerQr(context);
+    if (url == null || !mounted) return;
+    _serverController.text = url;
+    await _connectServer();
+  }
+
   Future<void> _clearLocalCache() async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -139,6 +147,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   decoration: InputDecoration(
                     hintText: SettingsStore.serverUrlExample,
                     hintStyle: const TextStyle(color: AppColors.textMuted),
+                    suffixIcon: IconButton(
+                      icon: const Icon(Icons.qr_code_scanner_rounded, color: AppColors.accent),
+                      tooltip: 'Scan QR code',
+                      onPressed: _connecting ? null : _scanServer,
+                    ),
                     filled: true,
                     fillColor: AppColors.surfaceHighlight,
                     border: OutlineInputBorder(

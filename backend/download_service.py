@@ -17,9 +17,21 @@ _pending: set[str] = set()
 _retry_counts: dict[str, int] = {}
 
 
-def _audio_path(track_id: str) -> Path:
+AUDIO_EXTS = (".m4a", ".mp3")
+
+
+def _audio_base(track_id: str) -> Path:
     safe = re.sub(r"[^\w\-]", "_", track_id)
-    return TEMP_DIR / f"{safe}.mp3"
+    return TEMP_DIR / safe
+
+
+def _audio_path(track_id: str) -> Path:
+    base = _audio_base(track_id)
+    for ext in AUDIO_EXTS:
+        candidate = base.with_suffix(ext)
+        if candidate.exists():
+            return candidate
+    return base.with_suffix(".m4a")
 
 
 def _norm(text: str) -> str:
@@ -164,13 +176,6 @@ def _ydl_opts(extra: dict | None = None) -> dict:
         "no_warnings": True,
         "retries": 3,
         "fragment_retries": 3,
-        "extractor_args": {"youtube": {"player_client": ["android", "web"]}},
-        "http_headers": {
-            "User-Agent": (
-                "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 "
-                "(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
-            ),
-        },
     }
     if extra:
         base.update(extra)
@@ -230,15 +235,15 @@ def _search_youtube(
     return None
 
 
-def _download_from_url(url: str, out_path: Path) -> bool:
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = out_path.with_suffix(".part")
+def _download_from_url(url: str, base: Path) -> Path | None:
+    base.parent.mkdir(parents=True, exist_ok=True)
+    tmp = base.with_name(base.name + ".part")
     opts = _ydl_opts({
-        "format": "bestaudio/best",
-        "outtmpl": str(tmp.with_suffix("")),
+        "format": "bestaudio[ext=m4a]/bestaudio",
+        "outtmpl": str(tmp) + ".%(ext)s",
         "postprocessors": [{
             "key": "FFmpegExtractAudio",
-            "preferredcodec": "mp3",
+            "preferredcodec": "m4a>m4a/mp3",
             "preferredquality": "192",
         }],
     })
@@ -247,22 +252,25 @@ def _download_from_url(url: str, out_path: Path) -> bool:
             ydl.download([url])
     except Exception as e:
         logger.warning("download failed %s: %s", url, e)
-        for f in tmp.parent.glob(f"{tmp.stem}*"):
+        for f in base.parent.glob(f"{tmp.name}*"):
             f.unlink(missing_ok=True)
-        return False
+        return None
 
-    for c in out_path.parent.glob(f"{tmp.stem}*"):
-        if c.suffix == ".mp3":
-            if c != out_path:
-                c.rename(out_path)
-            return True
-    return out_path.exists()
+    result = None
+    for f in base.parent.glob(f"{tmp.name}*"):
+        if f.suffix in AUDIO_EXTS and result is None:
+            result = base.with_suffix(f.suffix)
+            f.rename(result)
+        else:
+            f.unlink(missing_ok=True)
+    return result
 
 
 def download_track_sync(track_id: str, artist: str, title: str, duration_ms: int) -> str | None:
     out_path = _audio_path(track_id)
     if out_path.exists():
         return str(out_path)
+    base = _audio_base(track_id)
 
     tried: set[str] = set()
     url = _search_youtube(artist, title, duration_ms)
@@ -270,8 +278,9 @@ def download_track_sync(track_id: str, artist: str, title: str, duration_ms: int
         return None
 
     for attempt in range(3):
-        if _download_from_url(url, out_path):
-            return str(out_path)
+        path = _download_from_url(url, base)
+        if path:
+            return str(path)
         tried.add(url)
         url = _search_youtube(artist, title, duration_ms, exclude=tried)
         if not url:
@@ -280,9 +289,9 @@ def download_track_sync(track_id: str, artist: str, title: str, duration_ms: int
 
 
 def delete_temp_file(track_id: str):
-    path = _audio_path(track_id)
-    if path.exists():
-        path.unlink(missing_ok=True)
+    base = _audio_base(track_id)
+    for ext in AUDIO_EXTS:
+        base.with_suffix(ext).unlink(missing_ok=True)
 
 
 async def enqueue_track(track_id: str, artist: str, title: str, duration_ms: int):

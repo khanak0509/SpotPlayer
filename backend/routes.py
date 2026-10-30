@@ -176,6 +176,7 @@ async def stream_track(track_id: str, request: Request):
             raise HTTPException(404, "Track not ready")
 
     file_size = os.path.getsize(path)
+    media_type = "audio/mp4" if path.endswith(".m4a") else "audio/mpeg"
     range_header = request.headers.get("range")
 
     if range_header:
@@ -199,7 +200,7 @@ async def stream_track(track_id: str, request: Request):
         return StreamingResponse(
             iter_range(),
             status_code=206,
-            media_type="audio/mpeg",
+            media_type=media_type,
             headers={
                 "Content-Range": f"bytes {start}-{end}/{file_size}",
                 "Accept-Ranges": "bytes",
@@ -214,7 +215,7 @@ async def stream_track(track_id: str, request: Request):
 
     return StreamingResponse(
         iter_full(),
-        media_type="audio/mpeg",
+        media_type=media_type,
         headers={
             "Accept-Ranges": "bytes",
             "Content-Length": str(file_size),
