@@ -173,6 +173,8 @@ Docker must be installed and running before you start the backend.
 
 </details>
 
+**Still stuck?** [Open an issue](https://github.com/khanak0509/SpotPlayer/issues/new) with what you tried and the error you see. Happy to help 🙌
+
 ---
 
 ## ⚠️ Disclaimer
