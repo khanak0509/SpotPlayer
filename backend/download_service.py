@@ -273,7 +273,14 @@ def download_track_sync(track_id: str, artist: str, title: str, duration_ms: int
     base = _audio_base(track_id)
 
     tried: set[str] = set()
-    url = _search_youtube(artist, title, duration_ms)
+    if track_id.startswith("yt_"):
+        url = f"https://www.youtube.com/watch?v={track_id[3:]}"
+        path = _download_from_url(url, base)
+        if path:
+            return str(path)
+        tried.add(url)
+
+    url = _search_youtube(artist, title, duration_ms, exclude=tried)
     if not url:
         return None
 

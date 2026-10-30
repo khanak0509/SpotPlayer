@@ -19,9 +19,16 @@ from models import (
 )
 from playlist_store import delete_playlist, list_playlists, load_playlist, save_playlist
 from spotify_service import parse_spotify_url
+from youtube_service import is_youtube_url, parse_youtube_url
 from track_store import batch_status, clear_path_sync, get_path, get_status
 
 router = APIRouter()
+
+
+def _parse_link(url: str) -> dict:
+    if is_youtube_url(url):
+        return parse_youtube_url(url)
+    return parse_spotify_url(url)
 
 
 async def _track_with_status(track: dict) -> TrackInfo:
@@ -82,9 +89,9 @@ async def _merge_playlist(existing: dict | None, parsed: dict) -> dict:
 @router.post("/playlists/import", response_model=ImportResponse)
 async def import_playlist(body: ImportRequest):
     try:
-        parsed = parse_spotify_url(body.url.strip())
+        parsed = _parse_link(body.url.strip())
     except Exception as e:
-        raise HTTPException(400, f"Could not resolve Spotify link: {e}")
+        raise HTTPException(400, f"Could not read that link: {e}")
 
     existing = await load_playlist(parsed["id"])
     data = await _merge_playlist(existing, parsed)
@@ -103,7 +110,7 @@ async def import_playlist(body: ImportRequest):
 @router.post("/playlists/sync", response_model=ImportResponse)
 async def sync_playlist(body: SyncRequest):
     try:
-        parsed = parse_spotify_url(body.url.strip())
+        parsed = _parse_link(body.url.strip())
     except Exception as e:
         raise HTTPException(400, f"Could not re-sync: {e}")
 

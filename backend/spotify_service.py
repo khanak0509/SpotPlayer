@@ -41,7 +41,7 @@ def detect_spotify_kind(url: str) -> str:
         return "track"
     if re.search(r"(playlist)/([a-zA-Z0-9]+)", url) or url.startswith("spotify:playlist:"):
         return "playlist"
-    raise ValueError("URL must be a Spotify playlist, album, or track link")
+    raise ValueError("URL must be a Spotify or YouTube link")
 
 
 def _extract_id(url: str, kind: str) -> str:
