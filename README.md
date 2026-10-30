@@ -10,7 +10,7 @@
     <img src="https://img.shields.io/badge/Plays-100%25%20Offline-brightgreen?style=for-the-badge" alt="Plays 100% offline">
   </p>
   
-  <h3><a href="SpotPlayer.apk">📲 Download APK (24MB)</a></h3>
+  <h3><a href="SpotPlayer.apk">📲 Download APK (25MB)</a></h3>
 </div>
 
 ---
