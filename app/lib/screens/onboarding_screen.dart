@@ -26,7 +26,7 @@ class _OnboardingSheet extends StatelessWidget {
   static const _steps = [
     (Icons.dns_outlined, 'Start server', 'Run start.sh (Mac/Linux) or start.bat (Windows).'),
     (Icons.link_rounded, 'Paste URL', 'Copy the URL it prints into Settings → Server.'),
-    (Icons.queue_music_rounded, 'Import from Spotify', 'Paste a playlist, album, or track link to download.'),
+    (Icons.queue_music_rounded, 'Import music', 'Paste a Spotify or YouTube link to download.'),
     (Icons.offline_bolt_rounded, 'Play offline', 'After import, your music works without the server.'),
   ];
 

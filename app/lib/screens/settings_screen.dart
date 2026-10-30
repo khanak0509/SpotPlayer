@@ -189,7 +189,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           const _SectionHeader('Playback'),
           SwitchListTile(
             title: const Text('Auto-sync playlists'),
-            subtitle: const Text('Check Spotify for new songs when app opens'),
+            subtitle: const Text('Check for new songs when app opens'),
             value: ref.watch(userPrefsProvider).autoSync,
             onChanged: (v) => ref.read(userPrefsProvider.notifier).setAutoSync(v),
           ),

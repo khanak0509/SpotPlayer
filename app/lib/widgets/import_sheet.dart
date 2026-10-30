@@ -65,7 +65,7 @@ class _ImportSheetState extends ConsumerState<ImportSheet> {
             children: [
               Expanded(
                 child: Text(
-                  'Import from Spotify',
+                  'Import music',
                   style: Theme.of(context).textTheme.titleLarge?.copyWith(
                         fontWeight: FontWeight.w700,
                       ),
@@ -79,7 +79,7 @@ class _ImportSheetState extends ConsumerState<ImportSheet> {
           ),
           const SizedBox(height: 4),
           Text(
-            'Paste a playlist, album, or track link',
+            'Paste a Spotify or YouTube link',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: AppColors.textSecondary,
                 ),
@@ -91,7 +91,7 @@ class _ImportSheetState extends ConsumerState<ImportSheet> {
             enabled: !_submitting,
             style: const TextStyle(color: AppColors.textPrimary),
             decoration: InputDecoration(
-              hintText: 'https://open.spotify.com/playlist/…',
+              hintText: 'Spotify or YouTube link',
               hintStyle: const TextStyle(color: AppColors.textMuted),
               filled: true,
               fillColor: AppColors.surfaceHighlight,
